@@ -26,11 +26,19 @@ export function resolveBuffer(
 
 // Build the list of {offerSku, catalogSku, stock, buffer, qty} for a channel's
 // matched + sync-eligible offers. Does NOT push. Used by preview and run.
-export async function computeChannelPlan(connectionId: string, tenantId: string) {
+export async function computeChannelPlan(connectionId: string, tenantId: string, only?: string[]) {
   const conn = await db.connection.findFirst({ where: { id: connectionId, tenantId } });
   if (!conn) throw new Error("Channel not found");
 
-  const offers = await db.channelOffer.findMany({ where: { connectionId } });
+  let offers = await db.channelOffer.findMany({ where: { connectionId } });
+  if (only && only.length) {
+    const want = new Set(only.map((x) => String(x).trim()).filter(Boolean));
+    // match an offer if its SKU or UPC is in the changed set
+    offers = offers.filter((o) =>
+      (o.offerSku && want.has(o.offerSku)) ||
+      (o.offerUpc && want.has(o.offerUpc))
+    );
+  }
   const catalog = await db.catalogItem.findMany({ where: { tenantId } });
   const rules = await db.bufferRule.findMany({ where: { connectionId } });
 
@@ -61,8 +69,8 @@ export async function computeChannelPlan(connectionId: string, tenantId: string)
 }
 
 // Run a sync: compute plan, optionally push to Mirakl, write SyncLog rows.
-export async function runChannelSync(connectionId: string, tenantId: string, opts: { dryRun: boolean; source?: "auto" | "manual" }) {
-  const { conn, plan } = await computeChannelPlan(connectionId, tenantId);
+export async function runChannelSync(connectionId: string, tenantId: string, opts: { dryRun: boolean; source?: "auto" | "manual"; only?: string[] }) {
+  const { conn, plan } = await computeChannelPlan(connectionId, tenantId, opts.only);
   const runId = `run_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 
   if (opts.dryRun) {
@@ -107,7 +115,7 @@ export async function runChannelSync(connectionId: string, tenantId: string, opt
     const t = setTimeout(() => {
       pendingTimers.delete(connectionId);
       // fire the real push; it will pass the throttle now that cooldown has elapsed
-      runChannelSync(connectionId, tenantId, { dryRun: false, source: "auto" })
+      runChannelSync(connectionId, tenantId, { dryRun: false, source: "auto", only: opts.only })
         .catch((e) => console.error("[debounce] scheduled push failed:", e.message));
     }, waitMs);
     // allow process to exit even if a timer is pending (dev convenience)
@@ -190,14 +198,14 @@ export async function skuForInventoryItem(tenantId: string, inventoryItemId: str
 }
 
 // Run sync for every sync-enabled marketplace channel of a tenant (live push).
-export async function syncAllChannelsForTenant(tenantId: string) {
+export async function syncAllChannelsForTenant(tenantId: string, only?: string[]) {
   const channels = await db.connection.findMany({
     where: { tenantId, type: "mirakl", syncEnabled: true },
   });
   const results: any[] = [];
   for (const ch of channels) {
     try {
-      const r = await runChannelSync(ch.id, tenantId, { dryRun: false, source: "auto" });
+      const r = await runChannelSync(ch.id, tenantId, { dryRun: false, source: "auto", only });
       results.push({ channel: ch.label, ...r });
     } catch (e: any) {
       results.push({ channel: ch.label, error: e.message });

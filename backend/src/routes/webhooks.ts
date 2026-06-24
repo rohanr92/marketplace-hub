@@ -50,10 +50,14 @@ export async function webhookRoutes(app: FastifyInstance) {
         const tenantId = conn.tenantId;
 
         const sku = await skuForInventoryItem(tenantId, invItemId);
-        if (sku) await refreshCatalogFromShopify(tenantId, [sku]);
-        else await refreshCatalogFromShopify(tenantId); // fallback: refresh all tracked
-
-        await syncAllChannelsForTenant(tenantId);
+        if (sku) {
+          await refreshCatalogFromShopify(tenantId, [sku]);
+          // surgical: push ONLY the changed SKU to marketplaces, not the whole catalog
+          await syncAllChannelsForTenant(tenantId, [sku]);
+        } else {
+          await refreshCatalogFromShopify(tenantId); // fallback: refresh all tracked
+          await syncAllChannelsForTenant(tenantId);
+        }
         app.log.info(`[webhook] inventory change for ${sku ?? invItemId} synced to marketplaces`);
       } catch (e: any) {
         app.log.error(`[webhook] processing failed: ${e.message}`);
