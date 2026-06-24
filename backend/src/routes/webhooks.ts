@@ -52,8 +52,12 @@ export async function webhookRoutes(app: FastifyInstance) {
         const sku = await skuForInventoryItem(tenantId, invItemId);
         if (sku) {
           await refreshCatalogFromShopify(tenantId, [sku]);
-          // surgical: push ONLY the changed SKU to marketplaces, not the whole catalog
-          await syncAllChannelsForTenant(tenantId, [sku]);
+          // resolve this SKU's UPC/barcode so we match offers keyed by EITHER sku or upc
+          const cat = await db.catalogItem.findFirst({ where: { tenantId, sku } });
+          const ids = [sku];
+          if (cat?.barcode) ids.push(cat.barcode);
+          // surgical: push ONLY the changed item (matched by sku OR upc), not the whole catalog
+          await syncAllChannelsForTenant(tenantId, ids);
         } else {
           await refreshCatalogFromShopify(tenantId); // fallback: refresh all tracked
           await syncAllChannelsForTenant(tenantId);
