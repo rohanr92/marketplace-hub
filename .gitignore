@@ -1,0 +1,38 @@
+# Secrets - NEVER commit these
+.env
+.env.*
+*.env
+backend/.env
+frontend/.env
+
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build output
+dist/
+build/
+**/dist/
+**/build/
+
+# Database files (local SQLite - we use Postgres now)
+*.db
+*.db-journal
+backend/dev.db
+
+# Prisma generated client
+**/.prisma/
+**/@prisma/client/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# Temp
+/tmp/
+*.tmp

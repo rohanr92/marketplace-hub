@@ -1,0 +1,201 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Tenant {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  logoBase64      String?
+  timezone        String?  @default("America/New_York")
+  ein             String?
+  sellerName      String?
+  sellerEmail     String?
+  sellerPhone     String?
+  returnAddress   String?
+  shippingAddress String?
+
+  users        User[]
+  connections  Connection[]
+  products     Product[]
+  skuMappings  SkuMapping[]
+  orders       Order[]
+  buffers      Buffer[]
+  catalogItems CatalogItem[]
+  bufferRules  BufferRule[]
+  channelOffers ChannelOffer[]
+  syncLogs      SyncLog[]
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  role         String   @default("owner")
+  isSuperAdmin Boolean  @default(false)
+  tenantId     String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  createdAt DateTime @default(now())
+}
+
+model Connection {
+  id            String   @id @default(cuid())
+  tenantId      String
+  tenant        Tenant   @relation(fields: [tenantId], references: [id])
+  type          String
+  label         String
+  baseUrl       String
+  apiKeyEnc     String
+  locationId    String?
+  active        Boolean  @default(true)
+  syncEnabled   Boolean  @default(false)
+  matchStrategy String   @default("upc")
+  mappingMode   String   @default("auto_sku")  // auto_sku | auto_upc | manual | full_catalog
+  defaultBuffer Int      @default(0)
+  lastSyncAt    DateTime?
+  createdAt     DateTime @default(now())
+
+  buffers       Buffer[]
+  orders        Order[]
+  mappings      SkuMapping[]
+  bufferRules   BufferRule[]
+  channelOffers ChannelOffer[]
+  syncLogs      SyncLog[]
+}
+
+model CatalogItem {
+  id          String   @id @default(cuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  shopifyVariantId String?
+  sku         String
+  barcode     String?
+  title       String
+  description String?
+  imageUrl    String?
+  price       Float    @default(0)
+  inventory   Int      @default(0)
+  source      String   @default("manual")
+  tracked     Boolean  @default(true)
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+
+  @@unique([tenantId, sku])
+}
+
+// An offer/listing on a marketplace, mapped to a catalog item.
+model ChannelOffer {
+  id            String   @id @default(cuid())
+  tenantId      String
+  tenant        Tenant   @relation(fields: [tenantId], references: [id])
+  connectionId  String
+  connection    Connection @relation(fields: [connectionId], references: [id])
+  offerSku      String   // the SKU/identifier on the marketplace
+  offerUpc      String?
+  title         String?
+  catalogItemId String?  // mapped catalog item (null = unmapped)
+  syncEnabled   Boolean  @default(true)
+  updatedAt     DateTime @updatedAt
+
+  @@unique([connectionId, offerSku])
+}
+
+// Buffer rule. scope: "all" | "sku" | "upc" | "title". value used when not "all".
+model BufferRule {
+  id           String   @id @default(cuid())
+  tenantId     String
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+  connectionId String
+  connection   Connection @relation(fields: [connectionId], references: [id])
+  scope        String   // "sku" | "upc" | "title"
+  value        String   // the sku/upc/title-substring to match
+  amount       Int      @default(0)
+  createdAt    DateTime @default(now())
+}
+
+model Product {
+  id          String   @id @default(cuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  shopifyVariantId String
+  sku         String
+  title       String
+  onHand      Int      @default(0)
+  updatedAt   DateTime @updatedAt
+
+  mappings SkuMapping[]
+
+  @@unique([tenantId, shopifyVariantId])
+}
+
+model SkuMapping {
+  id           String   @id @default(cuid())
+  tenantId     String
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+  productId    String
+  product      Product  @relation(fields: [productId], references: [id])
+  connectionId String
+  connection   Connection @relation(fields: [connectionId], references: [id])
+  channelSku   String
+  syncEnabled  Boolean  @default(true)
+
+  @@unique([connectionId, channelSku])
+}
+
+model Buffer {
+  id           String   @id @default(cuid())
+  tenantId     String
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+  connectionId String?
+  connection   Connection? @relation(fields: [connectionId], references: [id])
+  sku          String?
+  amount       Int      @default(0)
+}
+
+model Order {
+  id              String   @id @default(cuid())
+  tenantId        String
+  tenant          Tenant   @relation(fields: [tenantId], references: [id])
+  connectionId    String
+  connection      Connection @relation(fields: [connectionId], references: [id])
+  channelOrderId  String
+  state           String
+  rawState        String
+  customerName    String?
+  totalPrice      Float    @default(0)
+  shopifyOrderId  String?
+  trackingNumber  String?
+  carrier         String?
+  createdAt       DateTime @default(now())
+  channelCreatedAt DateTime?
+  itemsJson       String
+  fullyRefunded   Boolean  @default(false)
+  refundedAmount  Float    @default(0)
+  refundJson      String?
+
+  @@unique([connectionId, channelOrderId])
+}
+
+model SyncLog {
+  id            String   @id @default(cuid())
+  tenantId      String
+  tenant        Tenant   @relation(fields: [tenantId], references: [id])
+  connectionId  String
+  connection    Connection @relation(fields: [connectionId], references: [id])
+  runId         String   // groups all rows from one sync run
+  offerSku      String
+  catalogSku    String?
+  stock         Int      @default(0)
+  bufferApplied Int      @default(0)
+  quantitySent  Int      @default(0)
+  status        String   // preview | success | error | skipped
+  message       String?
+  miraklImportId String?
+  createdAt     DateTime @default(now())
+
+  @@index([connectionId, createdAt])
+}
