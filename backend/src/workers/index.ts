@@ -33,14 +33,14 @@ async function reconcileAllTenants() {
   // After per-tenant reconcile: push any Shopify-fulfilled orders back to Mirakl.
   await syncFulfillmentsAllTenants();
 }
-// Full inventory reconcile every 3 days (instant path is the webhook).
-// Catches anything a missed webhook dropped. Runs at 00:00 every 3rd day.
-cron.schedule("0 0 */3 * *", reconcileAllTenants);
+// Full inventory reconcile every day (instant path is the webhook).
+// Catches anything a missed webhook dropped. Runs at 00:00 daily.
+cron.schedule("0 0 * * *", reconcileAllTenants);
 
-// --- Log cleanup: delete sync logs older than 24h, hourly ---
+// --- Log cleanup: delete sync logs older than 6h, hourly ---
 cron.schedule("0 * * * *", async () => {
-  const n = await cleanupSyncLogs(24);
+  const n = await cleanupSyncLogs(6);
   if (n) console.log(`[cron] cleaned ${n} old sync logs`);
 });
 
-console.log("Schedules: order poll 5m, full reconcile every 3 days, log cleanup hourly. Webhooks handle instant inventory sync.");
+console.log("Schedules: order poll 5m, full reconcile daily, log cleanup hourly (6h retention). Webhooks handle instant inventory sync.");

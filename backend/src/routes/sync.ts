@@ -67,7 +67,8 @@ export async function syncRoutes(app: FastifyInstance) {
 
   // Manual cleanup trigger (worker also does this automatically)
   app.post("/reports/cleanup", async (req) => {
-    const n = await cleanupSyncLogs(24);
+    // Manual button: clear ALL logs immediately.
+    const n = await cleanupSyncLogs(0);
     return { deleted: n };
   });
 }

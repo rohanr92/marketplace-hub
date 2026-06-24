@@ -153,7 +153,12 @@ export async function runChannelSync(connectionId: string, tenantId: string, opt
 }
 
 // delete sync logs older than N hours
-export async function cleanupSyncLogs(hours = 24) {
+export async function cleanupSyncLogs(hours = 6) {
+  // hours <= 0 means delete ALL logs (used by the manual "Clear logs" button).
+  if (hours <= 0) {
+    const all = await db.syncLog.deleteMany({});
+    return all.count;
+  }
   const cutoff = new Date(Date.now() - hours * 3600 * 1000);
   const r = await db.syncLog.deleteMany({ where: { createdAt: { lt: cutoff } } });
   return r.count;
