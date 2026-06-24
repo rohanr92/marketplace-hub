@@ -23,7 +23,7 @@ export async function webhookRoutes(app: FastifyInstance) {
     const hmac = req.headers["x-shopify-hmac-sha256"] as string | undefined;
     const shopDomain = req.headers["x-shopify-shop-domain"] as string | undefined;
     const webhookId = req.headers["x-shopify-webhook-id"] as string | undefined;
-    const raw: Buffer = (req as any).rawBody ?? Buffer.from(JSON.stringify(req.body ?? {}));
+    const raw: Buffer = (req as any).rawBody ?? Buffer.from("");
 
     // Verify HMAC (base64) against raw body using the webhook secret.
     const secret = config.shopifyWebhookSecret;
@@ -65,7 +65,7 @@ export async function webhookRoutes(app: FastifyInstance) {
     const hmac = req.headers["x-shopify-hmac-sha256"] as string | undefined;
     const shopDomain = req.headers["x-shopify-shop-domain"] as string | undefined;
     const webhookId = req.headers["x-shopify-webhook-id"] as string | undefined;
-    const raw: Buffer = (req as any).rawBody ?? Buffer.from(JSON.stringify(req.body ?? {}));
+    const raw: Buffer = (req as any).rawBody ?? Buffer.from("");
 
     const secret = config.shopifyWebhookSecret;
     if (!secret) { reply.code(500).send("Webhook secret not configured"); return; }

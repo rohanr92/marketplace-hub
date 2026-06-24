@@ -22,11 +22,16 @@ const app = Fastify({ logger: true });
 
 app.addContentTypeParser(
   "application/json",
-  { parseAs: "string" },
-  (_req, body, done) => {
-    if (!body || (body as string).length === 0) return done(null, {});
-    try { done(null, JSON.parse(body as string)); }
-    catch (e) { done(e as Error, undefined); }
+  { parseAs: "buffer" },
+  (req, body, done) => {
+    // Keep the exact raw bytes so Shopify webhook HMAC verifies correctly.
+    (req as any).rawBody = body;
+    try {
+      const buf = body;
+      done(null, buf && buf.length ? JSON.parse(buf.toString("utf8")) : {});
+    } catch (e) {
+      done(e, undefined);
+    }
   }
 );
 
