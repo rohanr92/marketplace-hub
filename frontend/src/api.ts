@@ -6,7 +6,6 @@ async function request(path: string, opts: RequestInit = {}) {
     ...(token() ? { Authorization: `Bearer ${token()}` } : {}),
     ...(opts.headers as Record<string, string> ?? {}),
   };
-  // only set JSON content-type when we actually send a body
   if (opts.body) headers["Content-Type"] = "application/json";
 
   const res = await fetch(BASE + path, { ...opts, headers });
@@ -29,6 +28,11 @@ export const api = {
   listOrders: () => request("/orders"),
   syncOrders: () => request("/orders/sync", { method: "POST" }),
   sampleOrders: () => request("/orders/sample", { method: "POST" }),
+  ordersList: (bucket: string, page: number) => request(`/orders/list?bucket=${bucket}&page=${page}&pageSize=50`),
+  acceptOrder: (id: string) => request(`/orders/${id}/accept`, { method: "POST" }),
+  refuseOrder: (id: string) => request(`/orders/${id}/refuse`, { method: "POST" }),
+  pushOrder: (id: string) => request(`/orders/${id}/push`, { method: "POST" }),
+  shipToMarketplace: (id: string) => request(`/orders/${id}/ship-to-marketplace`, { method: "POST" }),
   listCatalog: () => request("/catalog"),
   importCatalog: (connectionId: string) => request("/catalog/import", { method: "POST", body: JSON.stringify({ connectionId }) }),
   importByIds: (connectionId: string, field: string, identifiers: string[]) =>
@@ -43,6 +47,38 @@ export const api = {
   inbox: () => request("/inbox"),
   getThread: (threadId: string, orderId: string) => request(`/threads/${threadId}?orderId=${orderId}`),
   replyThread: (threadId: string, body: any) => request(`/threads/${threadId}/reply`, { method: "POST", body: JSON.stringify(body) }),
+  channelSettings: (id: string) => request(`/channels/${id}/settings`),
+  updateChannelSettings: (id: string, body: any) => request(`/channels/${id}/settings`, { method: "PATCH", body: JSON.stringify(body) }),
+  addBufferRule: (id: string, scope: string, value: string, amount: number) =>
+    request(`/channels/${id}/buffer-rules`, { method: "POST", body: JSON.stringify({ scope, value, amount }) }),
+  deleteBufferRule: (id: string, ruleId: string) => request(`/channels/${id}/buffer-rules/${ruleId}`, { method: "DELETE" }),
+  mapOffer: (id: string, offerId: string, catalogItemId: string | null) =>
+    request(`/channels/${id}/offers/${offerId}`, { method: "PATCH", body: JSON.stringify({ catalogItemId }) }),
+  sampleOffers: (id: string) => request(`/channels/${id}/offers/sample`, { method: "POST" }),
+  pullOffers: (id: string) => request(`/channels/${id}/pull-offers`, { method: "POST" }),
+  reconcile: (id: string) => request(`/channels/${id}/reconcile`),
+  channelOffers: (id: string, filter: string, page: number, pageSize = 50) =>
+    request(`/channels/${id}/offers?filter=${filter}&page=${page}&pageSize=${pageSize}`),
+  bulkMap: (id: string, field: string, identifiers: string[]) =>
+    request(`/channels/${id}/bulk-map`, { method: "POST", body: JSON.stringify({ field, identifiers }) }),
+  syncPreview: (id: string) => request(`/channels/${id}/sync/preview`, { method: "POST" }),
+  syncRun: (id: string) => request(`/channels/${id}/sync/run`, { method: "POST" }),
+  reportsSync: (params: string) => request(`/reports/sync${params}`),
+  reportsSummary: () => request(`/reports/summary`),
+  reportsCleanup: () => request(`/reports/cleanup`, { method: "POST" }),
+  adminTenants: () => request("/admin/tenants"),
+  adminStats: () => request("/admin/stats"),
+  adminCreateCompany: (companyName: string, ownerEmail: string, ownerPassword: string) =>
+    request("/admin/companies", { method: "POST", body: JSON.stringify({ companyName, ownerEmail, ownerPassword }) }),
+  adminChangePassword: (newPassword: string) =>
+    request("/admin/password", { method: "PATCH", body: JSON.stringify({ newPassword }) }),
+  impersonate: (tenantId: string, readOnly: boolean) =>
+    request(`/admin/impersonate/${tenantId}`, { method: "POST", body: JSON.stringify({ readOnly }) }),
+  getCompany: () => request("/settings/company"),
+  updateCompany: (body: any) => request("/settings/company", { method: "PATCH", body: JSON.stringify(body) }),
+  listUsers: () => request("/settings/users"),
+  addUser: (body: any) => request("/settings/users", { method: "POST", body: JSON.stringify(body) }),
+  removeUser: (id: string) => request(`/settings/users/${id}`, { method: "DELETE" }),
 };
 
 export function saveAuth(token: string, user: any, tenant: any) {
@@ -63,14 +99,12 @@ export function updateStoredTenant(patch: any) {
   window.dispatchEvent(new Event("tenant-updated"));
 }
 export function enterImpersonation(token: string, tenant: any, readOnly: boolean) {
-  // stash the current (super-admin) session so we can restore it on exit
   localStorage.setItem("admin_token", localStorage.getItem("token") ?? "");
   localStorage.setItem("admin_user", localStorage.getItem("user") ?? "");
   localStorage.setItem("admin_tenant", localStorage.getItem("tenant") ?? "");
   localStorage.setItem("token", token);
   localStorage.setItem("tenant", JSON.stringify(tenant));
   localStorage.setItem("impersonation", JSON.stringify({ tenantName: tenant.name, readOnly }));
-  // keep the admin user object so the UI still knows we are super admin underneath
   window.dispatchEvent(new Event("tenant-updated"));
 }
 export function exitImpersonation() {
@@ -90,69 +124,3 @@ export function currentImpersonation() {
   try { return JSON.parse(localStorage.getItem("impersonation") ?? "null"); } catch { return null; }
 }
 export function isAuthed() { return !!localStorage.getItem("token"); }
-
-Object.assign(api, {
-  channelSettings: (id: string) => request(`/channels/${id}/settings`),
-  updateChannelSettings: (id: string, body: any) => request(`/channels/${id}/settings`, { method: "PATCH", body: JSON.stringify(body) }),
-  addBufferRule: (id: string, scope: string, value: string, amount: number) =>
-    request(`/channels/${id}/buffer-rules`, { method: "POST", body: JSON.stringify({ scope, value, amount }) }),
-  deleteBufferRule: (id: string, ruleId: string) => request(`/channels/${id}/buffer-rules/${ruleId}`, { method: "DELETE" }),
-  mapOffer: (id: string, offerId: string, catalogItemId: string | null) =>
-    request(`/channels/${id}/offers/${offerId}`, { method: "PATCH", body: JSON.stringify({ catalogItemId }) }),
-  sampleOffers: (id: string) => request(`/channels/${id}/offers/sample`, { method: "POST" }),
-});
-
-Object.assign(api, {
-  channelSettings: (id: string) => request(`/channels/${id}/settings`),
-  updateChannelSettings: (id: string, body: any) => request(`/channels/${id}/settings`, { method: "PATCH", body: JSON.stringify(body) }),
-  addBufferRule: (id: string, scope: string, value: string, amount: number) =>
-    request(`/channels/${id}/buffer-rules`, { method: "POST", body: JSON.stringify({ scope, value, amount }) }),
-  deleteBufferRule: (id: string, ruleId: string) => request(`/channels/${id}/buffer-rules/${ruleId}`, { method: "DELETE" }),
-  mapOffer: (id: string, offerId: string, catalogItemId: string | null) =>
-    request(`/channels/${id}/offers/${offerId}`, { method: "PATCH", body: JSON.stringify({ catalogItemId }) }),
-  sampleOffers: (id: string) => request(`/channels/${id}/offers/sample`, { method: "POST" }),
-});
-
-Object.assign(api, {
-  pullOffers: (id: string) => request(`/channels/${id}/pull-offers`, { method: "POST" }),
-  reconcile: (id: string) => request(`/channels/${id}/reconcile`),
-});
-
-Object.assign(api, {
-  channelOffers: (id: string, filter: string, page: number, pageSize = 50) =>
-    request(`/channels/${id}/offers?filter=${filter}&page=${page}&pageSize=${pageSize}`),
-  bulkMap: (id: string, field: string, identifiers: string[]) =>
-    request(`/channels/${id}/bulk-map`, { method: "POST", body: JSON.stringify({ field, identifiers }) }),
-});
-
-Object.assign(api, {
-  syncPreview: (id: string) => request(`/channels/${id}/sync/preview`, { method: "POST" }),
-  syncRun: (id: string) => request(`/channels/${id}/sync/run`, { method: "POST" }),
-  reportsSync: (params: string) => request(`/reports/sync${params}`),
-  reportsSummary: () => request(`/reports/summary`),
-  reportsCleanup: () => request(`/reports/cleanup`, { method: "POST" }),
-});
-
-Object.assign(api, {
-  ordersList: (bucket: string, page: number) => request(`/orders/list?bucket=${bucket}&page=${page}&pageSize=50`),
-  acceptOrder: (id: string) => request(`/orders/${id}/accept`, { method: "POST" }),
-  adminTenants: () => request("/admin/tenants"),
-  adminStats: () => request("/admin/stats"),
-  adminCreateCompany: (companyName: string, ownerEmail: string, ownerPassword: string) =>
-    request("/admin/companies", { method: "POST", body: JSON.stringify({ companyName, ownerEmail, ownerPassword }) }),
-  adminChangePassword: (newPassword: string) =>
-    request("/admin/password", { method: "PATCH", body: JSON.stringify({ newPassword }) }),
-  impersonate: (tenantId: string, readOnly: boolean) =>
-    request(`/admin/impersonate/${tenantId}`, { method: "POST", body: JSON.stringify({ readOnly }) }),
-  getCompany: () => request("/settings/company"),
-  updateCompany: (body: any) => request("/settings/company", { method: "PATCH", body: JSON.stringify(body) }),
-  listUsers: () => request("/settings/users"),
-  addUser: (body: any) => request("/settings/users", { method: "POST", body: JSON.stringify(body) }),
-  removeUser: (id: string) => request(`/settings/users/${id}`, { method: "DELETE" }),
-  refuseOrder: (id: string) => request(`/orders/${id}/refuse`, { method: "POST" }),
-  pushOrder: (id: string) => request(`/orders/${id}/push`, { method: "POST" }),
-});
-
-Object.assign(api, {
-  shipToMarketplace: (id: string) => request(`/orders/${id}/ship-to-marketplace`, { method: "POST" }),
-});

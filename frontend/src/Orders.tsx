@@ -54,7 +54,7 @@ export default function Orders() {
     setBusyId(id);
     try { await api.refuseOrder(id); setMsg("Order refused"); load(); }
     catch (e: any) { setMsg(e.message || "Failed to refuse"); }
-    finally { setBusyId(null); }
+    finally { setBusyId(""); }
   }
   async function push(id: string) {
     setBusyId(id); setMsg("");
