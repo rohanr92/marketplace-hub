@@ -59,6 +59,7 @@ await app.register(adminRoutes);
 app.addHook("onRequest", async (req: any, reply: any) => {
   if (!["POST", "PUT", "PATCH", "DELETE"].includes(req.method)) return;
   if (req.url.startsWith("/auth")) return; // login/signup must work
+  if (req.url.startsWith("/webhooks")) return; // Shopify webhooks auth via HMAC, not tokens
   const header = req.headers.authorization;
   if (!header?.startsWith("Bearer ")) return; // authGuard will reject later
   try {
