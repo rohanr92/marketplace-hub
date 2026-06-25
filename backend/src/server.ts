@@ -1,3 +1,4 @@
+import "./instrument.js";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import { config } from "./lib/config.js";
@@ -19,6 +20,8 @@ import { ordersListRoutes } from "./routes/ordersList.js";
 import { orderActionRoutes } from "./routes/orderActions.js";
 
 const app = Fastify({ logger: true });
+import * as Sentry from "@sentry/node";
+Sentry.setupFastifyErrorHandler(app);
 
 app.addContentTypeParser(
   "application/json",
