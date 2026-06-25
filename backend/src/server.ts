@@ -22,6 +22,12 @@ import { orderActionRoutes } from "./routes/orderActions.js";
 const app = Fastify({ logger: true });
 import * as Sentry from "@sentry/node";
 Sentry.setupFastifyErrorHandler(app);
+// Explicit safety net: forward all 5xx errors to Sentry directly.
+app.addHook("onError", async (_req, reply, error) => {
+  if (!reply.statusCode || reply.statusCode >= 500) {
+    Sentry.captureException(error);
+  }
+});
 
 app.addContentTypeParser(
   "application/json",
