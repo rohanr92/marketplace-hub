@@ -49,6 +49,10 @@ await app.register(cors, {
   allowedHeaders: ["Content-Type", "Authorization"],
 });
 
+app.get("/debug-sentry", async () => {
+  throw new Error("Sentry backend test error - safe to ignore");
+});
+
 app.get("/health", async () => {
   const tenants = await db.tenant.count();
   return { ok: true, tenants };
