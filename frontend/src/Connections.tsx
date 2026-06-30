@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import Shell from "./Shell";
 import { api } from "./api";
 
+const API_BASE = import.meta.env.VITE_API_URL as string;
+
 type Conn = {
   id: string; type: "mirakl" | "shopify"; label: string;
   baseUrl: string; active: boolean; locationId: string | null;
@@ -14,8 +16,16 @@ export default function Connections() {
   const [locations, setLocations] = useState<Record<string, any[]>>({});
   const [savedMsg, setSavedMsg] = useState<Record<string, string>>({});
 
+  const [shopifyBanner, setShopifyBanner] = useState("");
   async function load() { setRows(await api.listConnections()); }
   useEffect(() => { load(); }, []);
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search);
+    if (p.get("shopify") === "connected") {
+      setShopifyBanner("Shopify store connected. Catalog import and webhooks are set up.");
+      window.history.replaceState({}, "", "/connections");
+    }
+  }, []);
 
   async function test(id: string) {
     setTestResult((p) => ({ ...p, [id]: "testing" }));
@@ -52,6 +62,19 @@ export default function Connections() {
     }
   }
 
+  function connectShopifyApp() {
+    const shop = prompt("Enter the Shopify store domain (e.g. brand.myshopify.com):");
+    if (!shop) return;
+    const clean = shop.trim().replace(/^https?:\/\//, "").replace(/\/$/, "").toLowerCase();
+    if (!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(clean)) {
+      alert("Please enter a valid .myshopify.com domain");
+      return;
+    }
+    const tok = localStorage.getItem("token") ?? "";
+    // Browser redirect to the backend install route (carries Hub token in query).
+    window.location.href = `${API_BASE}/shopify/install?shop=${encodeURIComponent(clean)}&token=${encodeURIComponent(tok)}`;
+  }
+
   async function remove(id: string) {
     if (!confirm("Delete this connection?")) return;
     await api.deleteConnection(id);
@@ -62,8 +85,14 @@ export default function Connections() {
     <Shell>
       <div className="page-head">
         <h2>Channels</h2>
-        <button className="btn" onClick={() => setOpen(true)}>+ Add channel</button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn btn-ghost" onClick={connectShopifyApp}>Connect Shopify (App)</button>
+          <button className="btn" onClick={() => setOpen(true)}>+ Add channel</button>
+        </div>
       </div>
+      {shopifyBanner && (
+        <div className="toast" style={{ marginBottom: 12 }}>{shopifyBanner}</div>
+      )}
 
       <div className="card">
         {rows.length === 0 && <div className="empty">No channels connected yet. Add your first Mirakl marketplace or Shopify store.</div>}
