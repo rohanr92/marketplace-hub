@@ -19,6 +19,7 @@ import { webhookRoutes } from "./routes/webhooks.js";
 import { slipRoutes } from "./routes/slip.js";
 import { ordersListRoutes } from "./routes/ordersList.js";
 import { orderActionRoutes } from "./routes/orderActions.js";
+import { shopifyOAuthRoutes } from "./routes/shopifyOAuth.js";
 
 const app = Fastify({ logger: true });
 import * as Sentry from "@sentry/node";
@@ -98,6 +99,7 @@ await app.register(webhookRoutes);
 await app.register(slipRoutes);
 await app.register(ordersListRoutes);
 await app.register(orderActionRoutes);
+await app.register(shopifyOAuthRoutes);
 
 app.listen({ port: config.port, host: "0.0.0.0" }, (err, addr) => {
   if (err) { app.log.error(err); process.exit(1); }
