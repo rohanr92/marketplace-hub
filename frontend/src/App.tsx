@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import Privacy from "./Privacy";
 import Login from "./Login";
 import Settings from "./Settings";
 import Admin from "./Admin";
@@ -39,6 +40,7 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
+        <Route path="/privacy" element={<Privacy />} />
         <Route path="/dashboard" element={<Protected><Dashboard /></Protected>} />
         <Route path="/connections" element={<AdminOnly><Connections /></AdminOnly>} />
         <Route path="/channels/:id" element={<AdminOnly><ChannelSettings /></AdminOnly>} />
