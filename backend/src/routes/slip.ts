@@ -5,11 +5,6 @@ import { downloadMiraklDocument } from "../services/mirakl.js";
 export async function slipRoutes(app: FastifyInstance) {
   // Public download: streams the Mirakl packing slip PDF with auth applied server-side.
   // Linked from Shopify order notes so warehouse staff can click and download directly.
-  // TEMP debug: list an order's documents (returns raw JSON from Mirakl OR72). Remove after testing.
-  app.get<{ Params: { orderId: string } }>(
-    "/orders/list-docs-test/:orderId",
-    async (req, reply) => {
-      const conn: any = await db.connection.findFirst({ where: { type: "mirakl" } });
       if (!conn) { reply.code(404).send("no mirakl connection"); return; }
       const { decrypt } = await import("../lib/crypto.js");
       const key = decrypt(conn.apiKeyEnc);
@@ -19,12 +14,6 @@ export async function slipRoutes(app: FastifyInstance) {
       reply.header("Content-Type", "application/json").send({ status: r.status, url, body: text });
     }
   );
-
-  // TEMP debug: download a doc by id using the first Mirakl connection. Remove after testing.
-  app.get<{ Params: { docId: string } }>(
-    "/orders/download-slip-test/:docId",
-    async (req, reply) => {
-      const conn: any = await db.connection.findFirst({ where: { type: "mirakl" } });
       if (!conn) { reply.code(404).send("no mirakl connection"); return; }
       try {
         const { buffer, contentType, filename } = await downloadMiraklDocument(
