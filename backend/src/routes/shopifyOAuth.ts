@@ -35,22 +35,41 @@ export async function shopifyOAuthRoutes(app: FastifyInstance) {
   // STEP 1: brand (logged into Hub) starts the install.
   // The Hub frontend opens: {API}/shopify/install?shop=brand.myshopify.com&token={hubJWT}
   app.get("/shopify/install", async (req, reply) => {
-    const q = req.query as { shop?: string; token?: string };
+    const q = req.query as Record<string, any>;
     if (!config.shopifyClientId) {
       return reply.code(500).send("Shopify app not configured");
     }
     if (!q.shop) return reply.code(400).send("Missing shop");
-    // Authenticate the Hub user from the token query param (browser redirect can't send headers).
-    let tenantId: string;
+    const shop = normShop(String(q.shop));
+    if (!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(shop)) {
+      return reply.code(400).send("Invalid shop domain");
+    }
+
+    // Two entry paths:
+    // (A) Hub-initiated: a valid Hub token is present -> we know the tenant, go straight to OAuth.
+    // (B) Shopify-initiated: Shopify hit the App URL with hmac+shop but no Hub token.
+    //     Per Shopify policy we must NOT show an error or our own shop form. Verify the
+    //     hmac to confirm it's really Shopify, then send the merchant to the Hub login,
+    //     carrying the shop so the install auto-continues after they authenticate.
+    let tenantId: string | null = null;
     try {
       const payload = verifyToken(q.token ?? "");
       tenantId = payload.tenantId;
     } catch {
-      return reply.code(401).send("Invalid or missing Hub token");
+      tenantId = null;
     }
-    const shop = normShop(q.shop);
-    if (!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(shop)) {
-      return reply.code(400).send("Invalid shop domain");
+
+    if (!tenantId) {
+      // Shopify-initiated (or token missing/expired). If Shopify signed it, verify; either way
+      // bounce to the Hub login with the shop so the user can authenticate and continue.
+      if (q.hmac) {
+        if (!verifyQueryHmac(q)) {
+          return reply.code(401).send("Invalid HMAC");
+        }
+      }
+      return reply.redirect(
+        `${config.frontendUrl}/login?shopify_install=${encodeURIComponent(shop)}`
+      );
     }
     // state carries tenantId + shop, signed + short-lived (CSRF + identity).
     const state = jwt.sign({ tenantId, shop }, config.jwtSecret, { expiresIn: "10m" });

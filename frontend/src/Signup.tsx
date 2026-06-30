@@ -20,6 +20,13 @@ export default function Signup() {
     try {
       const r = await api.signup(email.trim(), password, company.trim());
       saveAuth(r.token, r.user, r.tenant);
+      // If this signup came from a Shopify app install, continue the install now.
+      const si = new URLSearchParams(window.location.search).get("shopify_install");
+      if (si) {
+        const API_BASE = import.meta.env.VITE_API_URL as string;
+        window.location.href = `${API_BASE}/shopify/install?shop=${encodeURIComponent(si)}&token=${encodeURIComponent(r.token)}`;
+        return;
+      }
       nav("/connections");
     } catch (e: any) {
       setErr(e.message);
