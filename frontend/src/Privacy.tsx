@@ -34,7 +34,7 @@ export default function Privacy() {
       <p>When the app is uninstalled, synchronization stops immediately and the store's connection is deactivated. Stored data for that store is erased upon receipt of Shopify's shop redaction request.</p>
 
       <h2>Contact</h2>
-      <p>For privacy questions or data requests, contact: <strong>support@marketplacehub.app</strong></p>
+      <p>For privacy questions or data requests, contact: <strong>rohan@rohanofficial.com</strong></p>
     </div>
   );
 }
