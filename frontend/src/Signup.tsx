@@ -56,7 +56,7 @@ export default function Signup() {
         </button>
         {err && <div className="err">{err}</div>}
         <p style={{ marginTop: 16, fontSize: 13 }}>
-          Already have an account? <Link to="/login" style={{ color: "#c9a227" }}>Sign in</Link>
+          Already have an account? <Link to={`/login${window.location.search}`} style={{ color: "#c9a227" }}>Sign in</Link>
         </p>
       </div>
     </div>

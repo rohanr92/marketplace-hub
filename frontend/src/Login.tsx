@@ -46,7 +46,7 @@ export default function Login() {
         </button>
         {err && <div className="err">{err}</div>}
         <p style={{ marginTop: 16, fontSize: 13 }}>
-          No account? <Link to="/signup" style={{ color: "#c9a227" }}>Create one</Link>
+          No account? <Link to={`/signup${window.location.search}`} style={{ color: "#c9a227" }}>Create one</Link>
         </p>
       </div>
     </div>
