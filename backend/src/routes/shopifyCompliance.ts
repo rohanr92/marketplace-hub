@@ -18,6 +18,40 @@ function verifyComplianceHmac(raw: Buffer, hmac?: string): boolean {
 }
 
 export async function shopifyComplianceRoutes(app: FastifyInstance) {
+  // Unified endpoint for the three mandatory GDPR topics (Shopify sends all to one URI
+  // when configured via compliance_topics in the TOML). Topic is in the x-shopify-topic header.
+  app.post("/webhooks/shopify/compliance", async (req, reply) => {
+    const hmac = req.headers["x-shopify-hmac-sha256"] as string | undefined;
+    const topic = req.headers["x-shopify-topic"] as string | undefined;
+    const shopDomain = req.headers["x-shopify-shop-domain"] as string | undefined;
+    const raw: Buffer = (req as any).rawBody ?? Buffer.from("");
+
+    // MUST return 401 on bad HMAC (review bot tests this with a dummy shop).
+    if (!verifyComplianceHmac(raw, hmac)) {
+      return reply.code(401).send("Invalid HMAC");
+    }
+    reply.code(200).send("ok");
+
+    try {
+      if (topic === "shop/redact" && shopDomain) {
+        const key = shopDomain.replace(".myshopify.com", "");
+        const conns = await db.connection.findMany({ where: { type: "shopify" } });
+        for (const c of conns) {
+          if (c.baseUrl.includes(key)) {
+            await db.connection.update({
+              where: { id: c.id },
+              data: { active: false, syncEnabled: false },
+            });
+          }
+        }
+      }
+      // customers/data_request and customers/redact: we don't retain customer PII
+      // beyond order pass-through; the 200 ack satisfies the requirement.
+    } catch (e: any) {
+      app.log.error(`[compliance] ${topic} handling error: ${e.message}`);
+    }
+  });
+
   // One handler for all three mandatory GDPR topics + uninstall.
   const topics: Array<{ path: string; kind: string }> = [
     { path: "/webhooks/shopify/customers/data_request", kind: "data_request" },

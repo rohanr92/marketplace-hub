@@ -1,0 +1,28 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "76df2ae1a770b07bf393e028e54000f7"
+name = "Marketplace Hub"
+application_url = "https://marketplace-hub-production-059e.up.railway.app/shopify/install"
+embedded = false
+
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+scopes = "read_fulfillments,write_fulfillments,write_inventory,read_inventory,write_locations,read_orders,write_orders,read_product_feeds,write_product_feeds,read_product_listings,write_product_listings,read_products,write_products"
+optional_scopes = [ ]
+use_legacy_install_flow = false
+
+[auth]
+redirect_urls = [
+  "https://marketplace-hub-production-059e.up.railway.app/shopify/callback"
+]
+
+[webhooks]
+api_version = "2026-04"
+
+[[webhooks.subscriptions]]
+compliance_topics = [ "customers/data_request", "customers/redact", "shop/redact" ]
+uri = "https://marketplace-hub-production-059e.up.railway.app/webhooks/shopify/compliance"
+
+[[webhooks.subscriptions]]
+topics = [ "app/uninstalled" ]
+uri = "https://marketplace-hub-production-059e.up.railway.app/webhooks/shopify/app/uninstalled"
