@@ -13,7 +13,7 @@ export async function slipRoutes(app: FastifyInstance) {
       if (!conn) { reply.code(404).send("no mirakl connection"); return; }
       const { decrypt } = await import("../lib/crypto.js");
       const key = decrypt(conn.apiKeyEnc);
-      const url = conn.baseUrl + "/api/orders/" + encodeURIComponent(req.params.orderId) + "/documents";
+      const url = conn.baseUrl + "/api/orders/documents?order_ids=" + encodeURIComponent(req.params.orderId);
       const r = await fetch(url, { headers: { Authorization: key, Accept: "application/json" } });
       const text = await r.text();
       reply.header("Content-Type", "application/json").send({ status: r.status, url, body: text });
