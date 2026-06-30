@@ -1,3 +1,4 @@
+import { config } from "../lib/config.js";
 import { db } from "../lib/db.js";
 import { shopifyGraphQL, fetchShopifyByIdentifiers } from "./shopify.js";
 import { fetchMiraklOrderById, listMiraklOrderDocuments } from "./mirakl.js";
@@ -95,7 +96,7 @@ export async function pushOrderToShopify(orderRowId: string, tenantId: string) {
   const docs = await listMiraklOrderDocuments(miraklConn, order.channelOrderId);
   const slipDoc = docs.find((d: any) => /DELIVERY|PACKING|SLIP|INVOICE/i.test(d.type ?? d.document_type ?? "")) ?? docs[0] ?? null;
   const slip = slipDoc ? (slipDoc.file_name ?? `document-${slipDoc.id}`) : null;
-  const slipUrl = slipDoc ? `${miraklConn.baseUrl}/api/orders/documents/download?document_ids=${slipDoc.id}` : null;
+  const slipUrl = slipDoc ? `${config.publicUrl}/orders/download-slip/${order.id}/${slipDoc.id}` : null;
 
   const notifEmail = raw.customer_notification_email ?? null;
   const realEmail = raw.customer?.customer_id && /@/.test(raw.customer.customer_id) ? raw.customer.customer_id : null;
@@ -110,7 +111,7 @@ export async function pushOrderToShopify(orderRowId: string, tenantId: string) {
   if (realEmail) noteLines.push(`Customer email: ${realEmail}`);
   if (notifEmail) noteLines.push(`Mirakl relay email: ${notifEmail}`);
   if (slip) noteLines.push(`Packing slip: ${slip}`);
-  if (slipUrl) noteLines.push(`Slip download (Mirakl auth): ${slipUrl}`);
+  if (slipUrl) noteLines.push(`Packing slip download: ${slipUrl}`);
   if (unmatched.length) noteLines.push(`UNMATCHED lines: ${unmatched.join(", ")}`);
 
   const shipTitle = raw.shipping_type_label ?? raw.shipping_type_code ?? "Shipping";

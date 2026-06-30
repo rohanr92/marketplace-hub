@@ -16,6 +16,7 @@ import { catalogRoutes } from "./routes/catalog.js";
 import { channelSettingsRoutes, channelReconcileRoutes, channelReconcileExtraRoutes } from "./routes/channelSettings.js";
 import { syncRoutes } from "./routes/sync.js";
 import { webhookRoutes } from "./routes/webhooks.js";
+import { slipRoutes } from "./routes/slip.js";
 import { ordersListRoutes } from "./routes/ordersList.js";
 import { orderActionRoutes } from "./routes/orderActions.js";
 
@@ -73,7 +74,8 @@ await app.register(adminRoutes);
 app.addHook("onRequest", async (req: any, reply: any) => {
   if (!["POST", "PUT", "PATCH", "DELETE"].includes(req.method)) return;
   if (req.url.startsWith("/auth")) return; // login/signup must work
-  if (req.url.startsWith("/webhooks")) return; // Shopify webhooks auth via HMAC, not tokens
+  if (req.url.startsWith("/webhooks")) return;
+  if (req.url.startsWith("/orders/download-slip")) return; // public packing-slip download // Shopify webhooks auth via HMAC, not tokens
   const header = req.headers.authorization;
   if (!header?.startsWith("Bearer ")) return; // authGuard will reject later
   try {
@@ -93,6 +95,7 @@ await app.register(channelReconcileRoutes);
 await app.register(channelReconcileExtraRoutes);
 await app.register(syncRoutes);
 await app.register(webhookRoutes);
+await app.register(slipRoutes);
 await app.register(ordersListRoutes);
 await app.register(orderActionRoutes);
 

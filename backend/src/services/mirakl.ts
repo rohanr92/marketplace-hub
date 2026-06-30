@@ -315,3 +315,24 @@ export async function replyToThread(
   if (!res.ok) throw new Error(`Mirakl M12 HTTP ${res.status}: ${await res.text()}`);
   return (await res.json()) as any;
 }
+
+
+// OR73 - download a single order document (packing slip / invoice) as raw bytes.
+// A single document_id returns the file UN-zipped (per Mirakl docs), so we stream it as-is.
+export async function downloadMiraklDocument(
+  conn: { baseUrl: string; apiKeyEnc: string },
+  documentId: string
+): Promise<{ buffer: Buffer; contentType: string; filename: string }> {
+  const apiKey = decrypt(conn.apiKeyEnc);
+  const url = `${conn.baseUrl}/api/orders/documents/download?document_ids=${encodeURIComponent(documentId)}`;
+  const res = await fetch(url, { headers: { Authorization: apiKey } });
+  if (!res.ok) throw new Error(`Mirakl document download HTTP ${res.status}`);
+  const arrayBuf = await res.arrayBuffer();
+  const buffer = Buffer.from(arrayBuf);
+  const contentType = res.headers.get("content-type") ?? "application/pdf";
+  // Try to read filename from Content-Disposition; fall back to a sensible default.
+  const cd = res.headers.get("content-disposition") ?? "";
+  const m = cd.match(/filename="?([^"]+)"?/i);
+  const filename = m ? m[1] : `packing-slip-${documentId}.pdf`;
+  return { buffer, contentType, filename };
+}
