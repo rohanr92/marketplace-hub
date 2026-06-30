@@ -121,13 +121,31 @@ function AddModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => vo
   const [label, setLabel] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
   const [apiKey, setApiKey] = useState("");
+  const [webhookSecret, setWebhookSecret] = useState("");
+  const [result, setResult] = useState<string>("");
   const [err, setErr] = useState("");
   const [saving, setSaving] = useState(false);
 
   async function save() {
-    setErr(""); setSaving(true);
+    setErr(""); setResult(""); setSaving(true);
     try {
-      await api.createConnection({ type, label, baseUrl, apiKey });
+      const res: any = await api.createConnection(
+        type === "shopify"
+          ? { type, label, baseUrl, apiKey, webhookSecret: webhookSecret || undefined }
+          : { type, label, baseUrl, apiKey }
+      );
+      // For Shopify, surface whether webhooks auto-registered.
+      if (type === "shopify" && res?.webhooks) {
+        const w = res.webhooks;
+        if (w.errors?.length) {
+          setResult("Connected, but webhook setup had issues: " + w.errors.join("; ") +
+            ". Check that the access token has webhook + inventory + orders scopes.");
+          setSaving(false);
+          return; // let them see the warning before closing
+        }
+        const done = [...(w.created || []), ...(w.existing || [])];
+        setResult("Connected. Webhooks active: " + (done.length ? done.join(", ") : "none"));
+      }
       onSaved();
     } catch (e: any) { setErr(e.message); } finally { setSaving(false); }
   }
@@ -155,7 +173,15 @@ function AddModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => vo
           <label>{type === "mirakl" ? "API key" : "Admin API access token"}</label>
           <input value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="paste secret key" />
         </div>
+        {type === "shopify" && (
+          <div className="field">
+            <label>Shopify webhook secret</label>
+            <input value={webhookSecret} onChange={(e) => setWebhookSecret(e.target.value)}
+              placeholder="for instant inventory sync (API secret key)" />
+          </div>
+        )}
         {err && <div className="toast bad">{err}</div>}
+        {result && <div className="toast">{result}</div>}
         <div className="modal-actions">
           <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
           <button className="btn" onClick={save} disabled={saving || !label || !baseUrl || !apiKey}>
