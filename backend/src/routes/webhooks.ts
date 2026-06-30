@@ -2,6 +2,7 @@ import { FastifyInstance } from "fastify";
 import crypto from "crypto";
 import { db } from "../lib/db.js";
 import { config } from "../lib/config.js";
+import { decrypt } from "../lib/crypto.js";
 import { refreshCatalogFromShopify, skuForInventoryItem, syncAllChannelsForTenant } from "../services/syncEngine.js";
 import { pushFulfillmentToMirakl } from "../services/fulfillmentSync.js";
 
@@ -16,6 +17,30 @@ function alreadySeen(id?: string) {
   return false;
 }
 
+async function hmacMatches(raw: Buffer, hmac: string | undefined, secret: string) {
+  if (!hmac || !secret) return false;
+  const digest = crypto.createHmac("sha256", secret).update(raw).digest("base64");
+  try { return crypto.timingSafeEqual(Buffer.from(digest), Buffer.from(hmac)); }
+  catch { return false; }
+}
+
+async function verifyShopifyHmac(raw: Buffer, hmac: string | undefined, shopDomain?: string) {
+  // 1) global secret (Menina + any store sharing the global app secret)
+  if (config.shopifyWebhookSecret && hmacMatches(raw, hmac, config.shopifyWebhookSecret)) return true;
+  // 2) per-connection secret, looked up by shop domain
+  if (shopDomain) {
+    const conns = await db.connection.findMany({ where: { type: "shopify" } });
+    const conn = conns.find((c) => c.baseUrl.includes(shopDomain.replace(".myshopify.com", "")));
+    if (conn && (conn as any).webhookSecretEnc) {
+      try {
+        const secret = decrypt((conn as any).webhookSecretEnc);
+        if (hmacMatches(raw, hmac, secret)) return true;
+      } catch { /* ignore */ }
+    }
+  }
+  return false;
+}
+
 export async function webhookRoutes(app: FastifyInstance) {
 
 // Shopify inventory_levels/update -> refresh that item, then push to marketplaces.
@@ -25,11 +50,9 @@ export async function webhookRoutes(app: FastifyInstance) {
     const webhookId = req.headers["x-shopify-webhook-id"] as string | undefined;
     const raw: Buffer = (req as any).rawBody ?? Buffer.from("");
 
-    // Verify HMAC (base64) against raw body using the webhook secret.
-    const secret = config.shopifyWebhookSecret;
-    if (!secret) { reply.code(500).send("Webhook secret not configured"); return; }
-    const digest = crypto.createHmac("sha256", secret).update(raw).digest("base64");
-    const ok = hmac && crypto.timingSafeEqual(Buffer.from(digest), Buffer.from(hmac));
+    // Verify HMAC: try the per-connection secret for this shop, then the global secret.
+    // Menina has no per-connection secret, so it uses the global one (unchanged behavior).
+    const ok = await verifyShopifyHmac(raw, hmac, shopDomain);
     if (!ok) { reply.code(401).send("Invalid HMAC"); return; }
 
     // Respond fast; do the work after.
@@ -75,10 +98,8 @@ export async function webhookRoutes(app: FastifyInstance) {
     const webhookId = req.headers["x-shopify-webhook-id"] as string | undefined;
     const raw: Buffer = (req as any).rawBody ?? Buffer.from("");
 
-    const secret = config.shopifyWebhookSecret;
-    if (!secret) { reply.code(500).send("Webhook secret not configured"); return; }
-    const digest = crypto.createHmac("sha256", secret).update(raw).digest("base64");
-    const ok = hmac && crypto.timingSafeEqual(Buffer.from(digest), Buffer.from(hmac));
+    // Verify HMAC: per-connection secret for this shop, then global (Menina unchanged).
+    const ok = await verifyShopifyHmac(raw, hmac, shopDomain);
     if (!ok) { reply.code(401).send("Invalid HMAC"); return; }
 
     reply.code(200).send("ok");

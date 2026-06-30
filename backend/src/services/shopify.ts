@@ -134,3 +134,56 @@ export async function fetchShopifyLocations(conn: { baseUrl: string; apiKeyEnc: 
     address: (l.address?.formatted ?? []).join(", "),
   }));
 }
+
+// Auto-register the inventory + fulfillment webhooks for a newly connected store.
+// Idempotent: checks existing subscriptions first so it never duplicates.
+export async function registerShopifyWebhooks(
+  conn: { baseUrl: string; apiKeyEnc: string },
+  publicBackendUrl: string
+): Promise<{ created: string[]; existing: string[]; errors: string[] }> {
+  const wanted = [
+    { topic: "INVENTORY_LEVELS_UPDATE", uri: `${publicBackendUrl}/webhooks/shopify/inventory` },
+    { topic: "FULFILLMENT_CREATE", uri: `${publicBackendUrl}/webhooks/shopify/fulfillment` },
+  ];
+
+  // 1) list existing subscriptions so we don't duplicate
+  const existingData: any = await shopifyGraphQL(
+    conn,
+    `query {
+      webhookSubscriptions(first: 100) {
+        edges { node { id topic endpoint { __typename ... on WebhookHttpEndpoint { callbackUrl } } } }
+      }
+    }`
+  );
+  const existingSubs = (existingData?.webhookSubscriptions?.edges ?? []).map((e: any) => ({
+    topic: e.node.topic,
+    url: e.node.endpoint?.callbackUrl ?? "",
+  }));
+
+  const created: string[] = [];
+  const existing: string[] = [];
+  const errors: string[] = [];
+
+  for (const w of wanted) {
+    const already = existingSubs.find((x: any) => x.topic === w.topic && x.url === w.uri);
+    if (already) { existing.push(w.topic); continue; }
+    try {
+      const data: any = await shopifyGraphQL(
+        conn,
+        `mutation($topic: WebhookSubscriptionTopic!, $sub: WebhookSubscriptionInput!) {
+          webhookSubscriptionCreate(topic: $topic, webhookSubscription: $sub) {
+            webhookSubscription { id }
+            userErrors { field message }
+          }
+        }`,
+        { topic: w.topic, sub: { uri: w.uri, format: "JSON" } }
+      );
+      const errs = data?.webhookSubscriptionCreate?.userErrors ?? [];
+      if (errs.length) errors.push(`${w.topic}: ${JSON.stringify(errs)}`);
+      else created.push(w.topic);
+    } catch (e: any) {
+      errors.push(`${w.topic}: ${e.message}`);
+    }
+  }
+  return { created, existing, errors };
+}

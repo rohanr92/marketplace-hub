@@ -4,7 +4,8 @@ import { db } from "../lib/db.js";
 import { encrypt } from "../lib/crypto.js";
 import { authGuard } from "../middleware/authGuard.js";
 import { testMiraklConnection } from "../services/mirakl.js";
-import { testShopifyConnection, fetchShopifyLocations } from "../services/shopify.js";
+import { testShopifyConnection, fetchShopifyLocations, registerShopifyWebhooks } from "../services/shopify.js";
+import { config } from "../lib/config.js";
 
 function normDomain(s: string) {
   return s.replace(/^https?:\/\//, "").replace(/\/$/, "").toLowerCase();
@@ -31,6 +32,7 @@ export async function connectionRoutes(app: FastifyInstance) {
       label: z.string().min(1),
       baseUrl: z.string().min(1),
       apiKey: z.string().min(1),
+      webhookSecret: z.string().optional(),
     }).parse(req.body);
 
     const baseUrl = body.type === "shopify" ? normDomain(body.baseUrl) : body.baseUrl.replace(/\/$/, "");
@@ -47,9 +49,23 @@ export async function connectionRoutes(app: FastifyInstance) {
       data: {
         tenantId: req.tenantId, type: body.type, label: body.label,
         baseUrl, apiKeyEnc: encrypt(body.apiKey),
+        webhookSecretEnc: body.webhookSecret ? encrypt(body.webhookSecret) : null,
       },
     });
-    return reply.code(201).send({ id: created.id });
+
+    // For a new Shopify store, auto-register inventory + fulfillment webhooks.
+    let webhookResult: any = null;
+    if (body.type === "shopify") {
+      try {
+        webhookResult = await registerShopifyWebhooks(
+          { baseUrl: created.baseUrl, apiKeyEnc: created.apiKeyEnc },
+          config.publicUrl
+        );
+      } catch (e: any) {
+        webhookResult = { errors: [e.message] };
+      }
+    }
+    return reply.code(201).send({ id: created.id, webhooks: webhookResult });
   });
 
   app.patch("/connections/:id", async (req, reply) => {

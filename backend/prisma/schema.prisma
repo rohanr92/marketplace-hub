@@ -50,6 +50,7 @@ model Connection {
   label         String
   baseUrl       String
   apiKeyEnc     String
+  webhookSecretEnc String?
   locationId    String?
   active        Boolean  @default(true)
   syncEnabled   Boolean  @default(false)
