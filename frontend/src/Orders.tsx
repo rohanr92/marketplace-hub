@@ -191,11 +191,13 @@ export default function Orders() {
                             <button className="btn" style={{ padding: "6px 12px", fontSize: 13 }} disabled={busyId === o.id} onClick={() => push(o.id)}>{busyId === o.id ? "..." : "Push to Shopify"}</button>
                           )}
 
-                          {/* In Shopify -> Open order (clean link, replaces the old "In Shopify" badge clutter) */}
-                          {o.shopifyOrderId && (
-                            o.shopifyOrderUrl
-                              ? <a href={o.shopifyOrderUrl} target="_blank" rel="noreferrer" className="btn btn-ghost" style={{ padding: "6px 12px", fontSize: 13, textDecoration: "none" }}>Open order</a>
-                              : <span className="btn btn-ghost" style={{ padding: "6px 12px", fontSize: 13, cursor: "default" }}>Open order</span>
+                          {/* Open order -> goes to the MARKETPLACE order page (like before). */}
+                          {o.marketplaceUrl && (
+                            <a href={o.marketplaceUrl} target="_blank" rel="noreferrer" className="btn btn-ghost" style={{ padding: "6px 12px", fontSize: 13, textDecoration: "none" }}>Open order</a>
+                          )}
+                          {/* If synced to Shopify, also offer a Shopify link. */}
+                          {o.shopifyOrderId && o.shopifyOrderUrl && (
+                            <a href={o.shopifyOrderUrl} target="_blank" rel="noreferrer" className="btn btn-ghost" style={{ padding: "6px 12px", fontSize: 13, textDecoration: "none", color: "#5b6472" }}>Shopify ↗</a>
                           )}
 
                           {/* In Shopify but not yet shipped back to marketplace -> allow marking shipped */}
