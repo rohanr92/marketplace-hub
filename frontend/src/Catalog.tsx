@@ -15,12 +15,15 @@ export default function Catalog() {
   const [busy, setBusy] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 50;
 
   async function load() {
     setRows(await api.listCatalog());
     setConns(await api.listConnections());
   }
   useEffect(() => { load(); }, []);
+  useEffect(() => { setPage(1); }, [rows.length]);
 
   const shopifyConns = conns.filter((c) => c.type === "shopify");
   const hasShopify = shopifyConns.length > 0;
@@ -53,6 +56,9 @@ export default function Catalog() {
     await api.deleteCatalog(id); load();
   }
 
+  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const pageRows = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
   return (
     <Shell>
       <div className="page-head">
@@ -77,7 +83,7 @@ export default function Catalog() {
           <table className="otable">
             <thead><tr><th>Product</th><th>SKU</th><th>UPC</th><th>Price</th><th>Inventory</th><th>Sync</th><th>Source</th><th></th></tr></thead>
             <tbody>
-              {rows.map((it) => (
+              {pageRows.map((it) => (
                 <tr key={it.id}>
                   <td>
                     <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
@@ -103,6 +109,18 @@ export default function Catalog() {
               ))}
             </tbody>
           </table>
+        )}
+        {rows.length > PAGE_SIZE && (
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,.08)" }}>
+            <div className="conn-sub">
+              Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, rows.length)} of {rows.length}
+            </div>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <button className="btn btn-ghost" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Prev</button>
+              <span className="conn-sub">Page {page} of {totalPages}</span>
+              <button className="btn btn-ghost" disabled={page >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>Next</button>
+            </div>
+          </div>
         )}
       </div>
 
