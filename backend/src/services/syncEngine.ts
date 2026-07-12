@@ -53,7 +53,8 @@ export async function computeChannelPlan(connectionId: string, tenantId: string,
     let cat: any = null;
     if (mode === "manual") cat = o.catalogItemId ? byId.get(o.catalogItemId) : null;
     else if (mode === "auto_upc") cat = o.offerUpc ? byUpc.get(o.offerUpc) : null;
-    else cat = bySku.get(o.offerSku); // auto_sku / full_catalog
+    // SKU mode: match by SKU first, then fall back to UPC/barcode if the SKU doesn't match.
+    else cat = (o.offerSku && bySku.get(o.offerSku)) || (o.offerUpc && byUpc.get(o.offerUpc)) || null; // auto_sku / full_catalog
 
     if (!cat) continue; // unmatched -> never touched
     if (!cat.tracked) {
@@ -217,4 +218,18 @@ export async function syncAllChannelsForTenant(tenantId: string, only?: string[]
     }
   }
   return results;
+}
+
+// Resolve a Shopify inventory_item_id to its variant BARCODE (UPC).
+// Fallback when SKU is empty, so a single inventory change matches marketplace offers by UPC.
+export async function barcodeForInventoryItem(tenantId: string, inventoryItemId: string | number) {
+  const conn = await db.connection.findFirst({ where: { tenantId, type: "shopify" } });
+  if (!conn) return null;
+  const gid = `gid://shopify/InventoryItem/${inventoryItemId}`;
+  const data: any = await shopifyGraphQL(
+    conn as any,
+    `query($id: ID!) { inventoryItem(id: $id) { variant { barcode } } }`,
+    { id: gid }
+  );
+  return data?.inventoryItem?.variant?.barcode ?? null;
 }

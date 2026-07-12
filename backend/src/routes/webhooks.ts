@@ -3,7 +3,7 @@ import crypto from "crypto";
 import { db } from "../lib/db.js";
 import { config } from "../lib/config.js";
 import { decrypt } from "../lib/crypto.js";
-import { refreshCatalogFromShopify, skuForInventoryItem, syncAllChannelsForTenant } from "../services/syncEngine.js";
+import { refreshCatalogFromShopify, skuForInventoryItem, syncAllChannelsForTenant, barcodeForInventoryItem } from "../services/syncEngine.js";
 import { pushFulfillmentToMirakl } from "../services/fulfillmentSync.js";
 
 // In-memory dedupe of recent webhook ids (per process).
@@ -75,15 +75,24 @@ export async function webhookRoutes(app: FastifyInstance) {
         const sku = await skuForInventoryItem(tenantId, invItemId);
         if (sku) {
           await refreshCatalogFromShopify(tenantId, [sku]);
-          // resolve this SKU's UPC/barcode so we match offers keyed by EITHER sku or upc
+          // Match offers keyed by EITHER sku or upc. Include BOTH the catalog barcode
+          // AND the live Shopify barcode, so an offer keyed by UPC matches even when
+          // the SKU doesn't line up with the marketplace's SKU.
           const cat = await db.catalogItem.findFirst({ where: { tenantId, sku } });
           const ids = [sku];
           if (cat?.barcode) ids.push(cat.barcode);
+          const liveBc = await barcodeForInventoryItem(tenantId, invItemId);
+          if (liveBc && !ids.includes(liveBc)) ids.push(liveBc);
           // surgical: push ONLY the changed item (matched by sku OR upc), not the whole catalog
           await syncAllChannelsForTenant(tenantId, ids);
         } else {
-          await refreshCatalogFromShopify(tenantId); // fallback: refresh all tracked
-          await syncAllChannelsForTenant(tenantId);
+          // Blank SKU (e.g. UPC-only products). Resolve by barcode instead of full-syncing everything.
+          const bc = await barcodeForInventoryItem(tenantId, invItemId);
+          if (bc) {
+            await syncAllChannelsForTenant(tenantId, [bc]);
+          } else {
+            app.log.warn(`[webhook] unresolved inv item ${invItemId} - skipping (no full catalog sync)`);
+          }
         }
         app.log.info(`[webhook] inventory change for ${sku ?? invItemId} synced to marketplaces`);
       } catch (e: any) {
