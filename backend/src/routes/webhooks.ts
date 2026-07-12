@@ -86,9 +86,13 @@ export async function webhookRoutes(app: FastifyInstance) {
           // surgical: push ONLY the changed item (matched by sku OR upc), not the whole catalog
           await syncAllChannelsForTenant(tenantId, ids);
         } else {
-          // Blank SKU (e.g. UPC-only products). Resolve by barcode instead of full-syncing everything.
+          // Blank SKU (e.g. UPC-only products like Lucila). Resolve by barcode.
           const bc = await barcodeForInventoryItem(tenantId, invItemId);
           if (bc) {
+            // MUST refresh this item's stock from Shopify FIRST, then sync. The item's
+            // stored "sku" is a GID, so refresh by looking it up via its barcode.
+            const cat = await db.catalogItem.findFirst({ where: { tenantId, barcode: bc } });
+            if (cat) await refreshCatalogFromShopify(tenantId, [cat.sku]);
             await syncAllChannelsForTenant(tenantId, [bc]);
           } else {
             app.log.warn(`[webhook] unresolved inv item ${invItemId} - skipping (no full catalog sync)`);
