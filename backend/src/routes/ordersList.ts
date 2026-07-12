@@ -42,6 +42,8 @@ export async function ordersListRoutes(app: FastifyInstance) {
     });
     const conns = await db.connection.findMany({ where: { tenantId: req.tenantId } });
     const connById = new Map(conns.map((c) => [c.id, c]));
+    const shopifyConn = conns.find((c) => c.type === "shopify");
+    const shopDomain = shopifyConn?.baseUrl?.replace(/^https?:\/\//, "").replace(/\/$/, "") ?? "";
 
     const enriched = orders.map((o) => {
       const c = connById.get(o.connectionId);
@@ -61,6 +63,9 @@ export async function ordersListRoutes(app: FastifyInstance) {
         channelCreatedAt: o.channelCreatedAt,
         items,
         shopifyOrderId: o.shopifyOrderId,
+        shopifyOrderUrl: o.shopifyOrderId && shopDomain
+          ? `https://${shopDomain.replace(".myshopify.com", "")}.myshopify.com/admin/orders/${String(o.shopifyOrderId).replace(/\D/g, "")}`
+          : null,
         trackingNumber: o.trackingNumber,
         carrier: o.carrier,
       };
