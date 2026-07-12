@@ -101,3 +101,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
   overflow: hidden;
   line-height: 1.4;
 }
+
+
+/* Contain wide tables: horizontal scroll stays INSIDE the card, never affects the sidebar. */
+.table-scroll { width: 100%; overflow-x: auto; }
+.main { min-width: 0; }            /* let the main column shrink instead of overflowing the grid */
+.shell { max-width: 100vw; overflow-x: hidden; }  /* no page-level horizontal scroll */

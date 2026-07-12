@@ -80,6 +80,7 @@ export default function Catalog() {
       <div className="card" style={{ padding: 0 }}>
         {rows.length === 0 && <div className="empty">No catalog items. Import by UPC/SKU, import all, add manually, or load samples.</div>}
         {rows.length > 0 && (
+          <div className="table-scroll">
           <table className="otable">
             <thead><tr><th>Product</th><th>SKU</th><th>UPC</th><th>Price</th><th>Inventory</th><th>Sync</th><th>Source</th><th></th></tr></thead>
             <tbody>
@@ -109,6 +110,7 @@ export default function Catalog() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
         {rows.length > PAGE_SIZE && (
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,.08)" }}>
