@@ -40,7 +40,7 @@ function stateStyle(state: string): { bg: string; fg: string; label: string } {
     case "RECEIVED": return { bg: "#e6f4ea", fg: "#1e7e34", label: "Received" };
     case "CLOSED": return { bg: "#eceef2", fg: "#5b6472", label: "Closed" };
     case "REFUSED": return { bg: "#fde8e8", fg: "#dc2626", label: "Refused" };
-    default: return { bg: "#eceef2", fg: "#5b6472", label: state || "\u2014" };
+    default: return { bg: "#eceef2", fg: "#5b6472", label: state || "—" };
   }
 }
 
@@ -55,13 +55,13 @@ const FILTERS = [
 const PAGE_SIZE = 20;
 
 function fmtDate(iso?: string) {
-  if (!iso) return "\u2014";
+  if (!iso) return "—";
   try { return new Date(iso).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }); }
   catch { return iso.slice(0, 10); }
 }
 
 function reasonLabel(code?: string | null) {
-  if (!code) return "\u2014";
+  if (!code) return "—";
   return code.replace(/^RETURN_/, "").replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c: string) => c.toUpperCase());
 }
 
@@ -137,7 +137,10 @@ export default function Returns() {
 
       <div className="card" style={{ padding: 0 }}>
         {loading ? (
-          <div className="empty">Loading returns\u2026</div>
+          <div className="empty" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "40px 0" }}>
+            <div className="spinner" />
+            <span>Loading returns from marketplaces...</span>
+          </div>
         ) : returns.length === 0 ? (
           <div className="empty">No returns{filter !== "ALL" ? ` with this status` : ""} yet.</div>
         ) : (
@@ -178,9 +181,9 @@ export default function Returns() {
                       <td>
                         {r.trackingUrl ? (
                           <a href={r.trackingUrl} target="_blank" rel="noreferrer" style={{ color: "#3b5bfd", textDecoration: "none", fontSize: 13 }}>
-                            {r.carrier ?? "Track"} \u2197
+                            {r.carrier ?? "Track"} ↗
                           </a>
-                        ) : <span className="conn-sub">\u2014</span>}
+                        ) : <span className="conn-sub">—</span>}
                       </td>
                       <td className="conn-sub">{fmtDate(r.dateCreated)}</td>
                     </tr>
@@ -192,7 +195,7 @@ export default function Returns() {
             {returns.length > PAGE_SIZE && (
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 18px", borderTop: "1px solid #e6e8ee" }}>
                 <div className="conn-sub">
-                  Showing {(page - 1) * PAGE_SIZE + 1}\u2013{Math.min(page * PAGE_SIZE, returns.length)} of {returns.length}
+                  Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, returns.length)} of {returns.length}
                 </div>
                 <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                   <button className="btn btn-ghost" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Prev</button>
