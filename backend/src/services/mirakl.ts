@@ -104,7 +104,7 @@ export async function fetchMiraklOffers(conn: { baseUrl: string; apiKeyEnc: stri
       // product_references holds identifiers like UPC/EAN/GTIN
       const refs = o.product_references ?? [];
       const upcRef = refs.find((r: any) =>
-        /UPC|EAN|GTIN/i.test(r.reference_type ?? r.type ?? "")
+        /UPC|EAN|GTIN|UID_CODE/i.test(r.reference_type ?? r.type ?? "")
       ) ?? refs[0];
       all.push({
         offerSku: o.shop_sku ?? String(o.offer_id),
