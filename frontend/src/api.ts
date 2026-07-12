@@ -43,7 +43,7 @@ export const api = {
   deleteCatalog: (id: string) => request(`/catalog/${id}`, { method: "DELETE" }),
   sampleCatalog: () => request("/catalog/sample", { method: "POST" }),
   analyticsSummary: (days: number) => request(`/analytics/summary?days=${days}`),
-  listReturns: () => request("/returns"),
+  listReturns: (state?: string) => request(`/returns${state && state !== "ALL" ? `?state=${state}` : ""}`),
   inbox: () => request("/inbox"),
   getThread: (threadId: string, orderId: string) => request(`/threads/${threadId}?orderId=${orderId}`),
   replyThread: (threadId: string, body: any) => request(`/threads/${threadId}/reply`, { method: "POST", body: JSON.stringify(body) }),
