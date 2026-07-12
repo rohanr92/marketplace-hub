@@ -30,6 +30,7 @@ export default function Login() {
   return (
     <div className="login-wrap">
       <div className="login-card">
+        <img src="/favicon.svg" alt="Marketplace Hub" style={{ width: 56, height: 56, marginBottom: 16 }} />
         <h1>Marketplace Hub</h1>
         <p>Sign in to your dashboard</p>
         <div className="field">
