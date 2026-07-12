@@ -72,33 +72,43 @@ export async function webhookRoutes(app: FastifyInstance) {
         if (!conn) return;
         const tenantId = conn.tenantId;
 
+        // Resolve which catalog item this inventory_item_id belongs to (by variant sku or barcode).
         const sku = await skuForInventoryItem(tenantId, invItemId);
-        if (sku) {
-          await refreshCatalogFromShopify(tenantId, [sku]);
-          // Match offers keyed by EITHER sku or upc. Include BOTH the catalog barcode
-          // AND the live Shopify barcode, so an offer keyed by UPC matches even when
-          // the SKU doesn't line up with the marketplace's SKU.
-          const cat = await db.catalogItem.findFirst({ where: { tenantId, sku } });
-          const ids = [sku];
-          if (cat?.barcode) ids.push(cat.barcode);
-          const liveBc = await barcodeForInventoryItem(tenantId, invItemId);
-          if (liveBc && !ids.includes(liveBc)) ids.push(liveBc);
-          // surgical: push ONLY the changed item (matched by sku OR upc), not the whole catalog
-          await syncAllChannelsForTenant(tenantId, ids);
-        } else {
-          // Blank SKU (e.g. UPC-only products like Lucila). Resolve by barcode.
-          const bc = await barcodeForInventoryItem(tenantId, invItemId);
-          if (bc) {
-            // MUST refresh this item's stock from Shopify FIRST, then sync. The item's
-            // stored "sku" is a GID, so refresh by looking it up via its barcode.
-            const cat = await db.catalogItem.findFirst({ where: { tenantId, barcode: bc } });
-            if (cat) await refreshCatalogFromShopify(tenantId, [cat.sku]);
-            await syncAllChannelsForTenant(tenantId, [bc]);
-          } else {
-            app.log.warn(`[webhook] unresolved inv item ${invItemId} - skipping (no full catalog sync)`);
-          }
+        const liveBc = await barcodeForInventoryItem(tenantId, invItemId);
+
+        // Find the catalog row: by real sku, else by barcode (blank-SKU / UPC-only products).
+        let cat = null;
+        if (sku) cat = await db.catalogItem.findFirst({ where: { tenantId, sku } });
+        if (!cat && liveBc) cat = await db.catalogItem.findFirst({ where: { tenantId, barcode: liveBc } });
+
+        if (!cat) {
+          app.log.warn(`[webhook] unresolved inv item ${invItemId} - skipping (no full catalog sync)`);
+          return;
         }
-        app.log.info(`[webhook] inventory change for ${sku ?? invItemId} synced to marketplaces`);
+
+        // Use the EXACT quantity Shopify sent in the webhook payload (payload.available).
+        // Do NOT re-query Shopify here - the read API can return a stale value right after
+        // the change. The webhook payload is authoritative for the new on-hand quantity.
+        const available = typeof payload?.available === "number" ? payload.available : null;
+        if (available !== null) {
+          await db.catalogItem.updateMany({
+            where: { tenantId, id: cat.id },
+            data: { inventory: available },
+          });
+        } else {
+          // No available in payload (rare) - fall back to a targeted refresh.
+          await refreshCatalogFromShopify(tenantId, [cat.sku]);
+        }
+
+        // Sync this ONE item to all marketplaces, matched by sku OR barcode.
+        const ids = [];
+        if (cat.sku && !cat.sku.startsWith("gid://")) ids.push(cat.sku);
+        if (cat.barcode) ids.push(cat.barcode);
+        if (liveBc && !ids.includes(liveBc)) ids.push(liveBc);
+        await syncAllChannelsForTenant(tenantId, ids);
+
+        app.log.info(`[webhook] inv item ${invItemId} -> ${cat.title} set to ${available ?? "(refreshed)"} and synced`);
+
       } catch (e: any) {
         app.log.error(`[webhook] processing failed: ${e.message}`);
       }
