@@ -129,12 +129,14 @@ export default function Connections() {
               {testResult[c.id]?.startsWith("ok:") && <div className="toast ok">Connected: {testResult[c.id].slice(3)}</div>}
               {testResult[c.id]?.startsWith("bad:") && <div className="toast bad">{testResult[c.id].slice(4)}</div>}
             </div>
+            <div className="conn-actions">
             <span className={"badge " + (c.active ? "green" : "red")}>{c.active ? "Active" : "Inactive"}</span>
             {c.type === "mirakl" && <button className="btn btn-ghost" onClick={() => location.assign("/channels/" + c.id)}>View channel</button>}
             <button className="btn btn-ghost" onClick={() => test(c.id)}>
               {testResult[c.id] === "testing" ? "Testing..." : "Test"}
             </button>
             <button className="btn btn-danger" onClick={() => remove(c.id)}>Delete</button>
+            </div>
           </div>
         ))}
       </div>
