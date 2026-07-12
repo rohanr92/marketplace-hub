@@ -12,6 +12,35 @@ function when(d: string) {
     : dt.toLocaleDateString([], { month: "short", day: "numeric" });
 }
 
+// Safely render a Mirakl message body that may contain HTML (<br>, <b>, links, etc.)
+// We strip scripts/styles/on* handlers and only keep basic formatting tags.
+function sanitizeHtml(raw: string): string {
+  if (!raw) return "";
+  let html = raw;
+  // remove script/style blocks entirely
+  html = html.replace(/<\s*(script|style|iframe|object|embed)[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi, "");
+  // remove any on*="..." event handlers
+  html = html.replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "");
+  // neutralize javascript: urls
+  html = html.replace(/(href|src)\s*=\s*("|')\s*javascript:[^"']*("|')/gi, '$1="#"');
+  // strip any tag that is not in our allowlist
+  const allowed = new Set(["br", "b", "strong", "i", "em", "u", "p", "ul", "ol", "li", "a", "span", "div"]);
+  html = html.replace(/<\/?\s*([a-zA-Z0-9]+)([^>]*)>/g, (m, tag) => {
+    return allowed.has(String(tag).toLowerCase()) ? m : "";
+  });
+  return html;
+}
+
+// Convert a user's plain-text reply (with newlines) into HTML with <br> so it
+// formats correctly on the marketplace/customer side.
+function textToHtml(text: string): string {
+  const esc = text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+  return esc.replace(/\n/g, "<br />");
+}
+
 function channelBrand(name: string) {
   const n = (name || "").toLowerCase();
   if (n.includes("nordstrom")) return { short: "NORD", bg: "#000" };
@@ -33,11 +62,18 @@ function recipientOptions(thread: any) {
   return [...seen.values()];
 }
 
+const RANGES = [
+  ["60", "Last 60 days"],
+  ["180", "Last 180 days"],
+  ["365", "Last year"],
+];
+
 export default function Messages() {
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [filter, setFilter] = useState("ALL");
+  const [days, setDays] = useState("60");
   const [active, setActive] = useState<any>(null);
   const [thread, setThread] = useState<any>(null);
   const [threadLoading, setThreadLoading] = useState(false);
@@ -48,12 +84,12 @@ export default function Messages() {
 
   function loadInbox() {
     setLoading(true);
-    api.inbox()
+    api.inbox({ days: Number(days) })
       .then((d: any) => setItems(d.items ?? []))
       .catch((e: any) => setErr(e.message))
       .finally(() => setLoading(false));
   }
-  useEffect(loadInbox, []);
+  useEffect(loadInbox, [days]);
 
   function openThread(it: any) {
     setActive(it);
@@ -85,7 +121,7 @@ export default function Messages() {
     if (to.length === 0) { setErr("Select at least one recipient."); return; }
     setErr("");
     setSending(true);
-    api.replyThread(active.threadId, { orderId: active.orderRowId, body: reply.trim(), to })
+    api.replyThread(active.threadId, { orderId: active.orderRowId, body: textToHtml(reply.trim()), to })
       .then(() => { setReply(""); openThread(active); loadInbox(); })
       .catch((e: any) => setErr(e.message))
       .finally(() => setSending(false));
@@ -101,6 +137,10 @@ export default function Messages() {
           <h2 style={{ margin: 0 }}>Messages</h2>
           <div className="conn-sub" style={{ marginTop: 4 }}>Customer & marketplace conversations</div>
         </div>
+        <select value={days} onChange={(e) => setDays(e.target.value)}
+          style={{ padding: "8px 12px", border: "1px solid #e6e8ee", borderRadius: 8, fontSize: 13, background: "#fff", color: "#1a2233", cursor: "pointer" }}>
+          {RANGES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+        </select>
       </div>
 
       {err && <div className="toast bad" style={{ marginBottom: 14 }}>{err}</div>}
@@ -128,15 +168,14 @@ export default function Messages() {
         })}
       </div>
 
-      <div style={{ display: "flex", gap: 16, height: "calc(100vh - 220px)", minHeight: 460 }}>
-        {/* Inbox list */}
+      <div style={{ display: "flex", gap: 16, height: "calc(100vh - 250px)", minHeight: 440 }}>
         <div className="card" style={{ width: 340, padding: 0, overflowY: "auto", flexShrink: 0 }}>
           {loading ? (
             <div className="empty" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "40px 0" }}>
-              <div className="spinner" /><span>Loading inbox…</span>
+              <div className="spinner" /><span>Loading inbox...</span>
             </div>
           ) : shown.length === 0 ? (
-            <div className="empty">{filter === "REPLY" ? "No messages need a reply." : "No messages yet."}</div>
+            <div className="empty">{filter === "REPLY" ? "No messages need a reply." : "No messages in this range."}</div>
           ) : (
             shown.map((it) => {
               const b = channelBrand(it.channel);
@@ -162,7 +201,7 @@ export default function Messages() {
                   <div style={{ color: "#6b7488", fontSize: 12, marginTop: 3 }}>#{it.channelOrderId}</div>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 7 }}>
                     <span style={{ color: "#8a92a3", fontSize: 11, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 170 }}>
-                      {it.lastSender || "—"}
+                      {it.lastSender || "-"}
                     </span>
                     {it.replyNeeded && (
                       <span style={{ background: "#fde8e8", color: "#dc2626", fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 20, flexShrink: 0 }}>
@@ -176,7 +215,6 @@ export default function Messages() {
           )}
         </div>
 
-        {/* Conversation pane */}
         <div className="card" style={{ flex: 1, padding: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
           {!active ? (
             <div className="empty" style={{ margin: "auto", textAlign: "center", color: "#8a92a3" }}>
@@ -187,7 +225,7 @@ export default function Messages() {
               <div style={{ padding: "16px 20px", borderBottom: "1px solid #eef0f4", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div>
                   <div style={{ fontSize: 16, fontWeight: 700, color: "#1a2233" }}>{active.topic}</div>
-                  <div style={{ color: "#6b7488", fontSize: 12, marginTop: 3 }}>{active.channel} · Order #{active.channelOrderId}</div>
+                  <div style={{ color: "#6b7488", fontSize: 12, marginTop: 3 }}>{active.channel} - Order #{active.channelOrderId}</div>
                 </div>
                 {(() => { const b = channelBrand(active.channel); return (
                   <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: 54, height: 26, padding: "0 8px", borderRadius: 6, background: b.bg, color: "#fff", fontSize: 11, fontWeight: 800 }}>{b.short}</span>
@@ -197,7 +235,7 @@ export default function Messages() {
               <div style={{ flex: 1, overflowY: "auto", padding: 20, background: "#fafbfc" }}>
                 {threadLoading ? (
                   <div className="empty" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "40px 0" }}>
-                    <div className="spinner" /><span>Loading conversation…</span>
+                    <div className="spinner" /><span>Loading conversation...</span>
                   </div>
                 ) : (thread?.messages ?? []).length === 0 ? (
                   <div className="empty">No messages in this thread.</div>
@@ -207,17 +245,21 @@ export default function Messages() {
                     return (
                       <div key={m.id} style={{ marginBottom: 16, display: "flex", flexDirection: "column", alignItems: mine ? "flex-end" : "flex-start" }}>
                         <div style={{ color: "#8a92a3", fontSize: 11, marginBottom: 5, padding: "0 4px" }}>
-                          {m.from?.display_name ?? "Unknown"} · {when(m.date_created)}
+                          {m.from?.display_name ?? "Unknown"} - {when(m.date_created)}
                         </div>
-                        <div style={{
-                          maxWidth: "72%", whiteSpace: "pre-wrap", fontSize: 13.5, lineHeight: 1.55,
-                          background: mine ? "#3b5bfd" : "#fff",
-                          color: mine ? "#fff" : "#1a2233",
-                          padding: "11px 15px", borderRadius: 14,
-                          borderBottomRightRadius: mine ? 4 : 14, borderBottomLeftRadius: mine ? 14 : 4,
-                          border: mine ? "none" : "1px solid #e6e8ee",
-                          boxShadow: "0 1px 2px rgba(16,24,40,.04)",
-                        }}>{m.body}</div>
+                        <div
+                          style={{
+                            maxWidth: "72%", fontSize: 13.5, lineHeight: 1.55,
+                            background: mine ? "#3b5bfd" : "#fff",
+                            color: mine ? "#fff" : "#1a2233",
+                            padding: "11px 15px", borderRadius: 14,
+                            borderBottomRightRadius: mine ? 4 : 14, borderBottomLeftRadius: mine ? 14 : 4,
+                            border: mine ? "none" : "1px solid #e6e8ee",
+                            boxShadow: "0 1px 2px rgba(16,24,40,.04)",
+                            wordBreak: "break-word",
+                          }}
+                          dangerouslySetInnerHTML={{ __html: sanitizeHtml(m.body) }}
+                        />
                       </div>
                     );
                   })
@@ -242,14 +284,14 @@ export default function Messages() {
                 )}
                 <div style={{ display: "flex", gap: 10, alignItems: "flex-end" }}>
                   <textarea value={reply} onChange={(e) => setReply(e.target.value)}
-                    placeholder="Type your reply…"
+                    placeholder="Type your reply..."
                     style={{
                       flex: 1, resize: "none", height: 58, background: "#fff", color: "#1a2233",
                       border: "1px solid #e6e8ee", borderRadius: 10, padding: "11px 13px", fontSize: 13.5, fontFamily: "inherit",
                     }} />
                   <button className="btn" onClick={send} disabled={sending || !reply.trim()}
                     style={{ height: 44, opacity: sending || !reply.trim() ? 0.5 : 1 }}>
-                    {sending ? "Sending…" : "Send"}
+                    {sending ? "Sending..." : "Send"}
                   </button>
                 </div>
               </div>

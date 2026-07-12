@@ -58,9 +58,11 @@ export async function messagesRoutes(app: FastifyInstance) {
   });
   // Inbox: scan recent orders for threads, return a flat list (newest first)
   app.get("/inbox", async (req, reply) => {
+    const q = req.query as { days?: string; unread?: string };
+    const days = Math.min(Math.max(Number(q.days) || 60, 1), 365);
+    const unreadOnly = q.unread === "1";
     const conns = await db.connection.findMany({ where: { tenantId: req.tenantId, type: "mirakl", active: true } });
-    // Look back 60 days for active threads.
-    const since = new Date(Date.now() - 60 * 24 * 3600 * 1000).toISOString();
+    const since = new Date(Date.now() - days * 24 * 3600 * 1000).toISOString();
 
     const items: any[] = [];
     for (const conn of conns) {
@@ -77,6 +79,7 @@ export async function messagesRoutes(app: FastifyInstance) {
           const order = channelOrderId
             ? await db.order.findFirst({ where: { tenantId: req.tenantId, channelOrderId, connectionId: conn.id } })
             : null;
+          if (unreadOnly && !t?.metadata?.shop_reply_needed_since) continue;
           items.push({
             orderRowId: order?.id ?? null,
             channelOrderId: channelOrderId || (orderEntity?.label ?? "—"),

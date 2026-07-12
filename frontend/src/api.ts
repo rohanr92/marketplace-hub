@@ -44,7 +44,7 @@ export const api = {
   sampleCatalog: () => request("/catalog/sample", { method: "POST" }),
   analyticsSummary: (days: number) => request(`/analytics/summary?days=${days}`),
   listReturns: (state?: string) => request(`/returns${state && state !== "ALL" ? `?state=${state}` : ""}`),
-  inbox: () => request("/inbox"),
+  inbox: (opts?: { days?: number; unreadOnly?: boolean }) => request(`/inbox?days=${opts?.days ?? 60}${opts?.unreadOnly ? "&unread=1" : ""}`),
   getThread: (threadId: string, orderId: string) => request(`/threads/${threadId}?orderId=${orderId}`),
   replyThread: (threadId: string, body: any) => request(`/threads/${threadId}/reply`, { method: "POST", body: JSON.stringify(body) }),
   channelSettings: (id: string) => request(`/channels/${id}/settings`),
