@@ -131,7 +131,6 @@ export default function Connections() {
             </div>
             <span className={"badge " + (c.active ? "green" : "red")}>{c.active ? "Active" : "Inactive"}</span>
             {c.type === "mirakl" && <button className="btn btn-ghost" onClick={() => location.assign("/channels/" + c.id)}>View channel</button>}
-            {c.type === "mirakl" && <button className="btn btn-ghost" onClick={() => location.assign("/channels/" + c.id)}>View channel</button>}
             <button className="btn btn-ghost" onClick={() => test(c.id)}>
               {testResult[c.id] === "testing" ? "Testing..." : "Test"}
             </button>
