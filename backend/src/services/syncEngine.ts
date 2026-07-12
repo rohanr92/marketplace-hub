@@ -4,6 +4,9 @@ import { pushMiraklStock } from "./mirakl.js";
 // per-channel last successful push time (ms) to respect Mirakl once-per-minute limit
 const lastPushAt = new Map<string, number>();
 const pendingTimers = new Map<string, NodeJS.Timeout>();
+// Accumulates SKUs/UPCs changed during a cooldown so rapid changes to different
+// products all get pushed together, instead of the latest change overwriting earlier ones.
+const pendingSkus = new Map<string, Set<string>>();
 const MIN_PUSH_INTERVAL_MS = 60_000;
 
 // Compute the buffer for a given offer using rule priority:
@@ -110,13 +113,27 @@ export async function runChannelSync(connectionId: string, tenantId: string, opt
         status: "skipped", message: `throttled - auto-push scheduled in ${waitSec}s`,
       },
     });
-    // Trailing debounce: (re)schedule a single push when the cooldown ends.
+    // Trailing debounce: accumulate ALL changed SKUs during the cooldown, then push
+    // them together when it ends. This prevents a later change from overwriting an
+    // earlier pending one (which would drop the earlier product's sync).
+    const acc = pendingSkus.get(connectionId) ?? new Set<string>();
+    if (opts.only && opts.only.length) {
+      for (const x of opts.only) acc.add(x);
+    } else {
+      // no filter means "everything" - mark with a sentinel so the retry does a full push
+      acc.add("__ALL__");
+    }
+    pendingSkus.set(connectionId, acc);
+
     const existing = pendingTimers.get(connectionId);
     if (existing) clearTimeout(existing);
     const t = setTimeout(() => {
       pendingTimers.delete(connectionId);
-      // fire the real push; it will pass the throttle now that cooldown has elapsed
-      runChannelSync(connectionId, tenantId, { dryRun: false, source: "auto", only: opts.only })
+      const skus = pendingSkus.get(connectionId);
+      pendingSkus.delete(connectionId);
+      const onlyArg = (skus && !skus.has("__ALL__")) ? Array.from(skus) : undefined;
+      // fire the real push with ALL accumulated SKUs; it will pass the throttle now
+      runChannelSync(connectionId, tenantId, { dryRun: false, source: "auto", only: onlyArg })
         .catch((e) => console.error("[debounce] scheduled push failed:", e.message));
     }, waitMs);
     // allow process to exit even if a timer is pending (dev convenience)
