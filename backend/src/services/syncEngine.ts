@@ -177,16 +177,40 @@ export async function refreshCatalogFromShopify(tenantId: string, onlySkus?: str
   const tracked = await db.catalogItem.findMany({ where });
   if (tracked.length === 0) return { refreshed: 0 };
 
-  const skus = tracked.map((t) => t.sku);
-  const { found } = await fetchShopifyByIdentifiers(conn as any, skus, "sku");
+  // Split items: those with a REAL sku (look up by sku) vs those whose "sku" is a
+  // Shopify GID or blank (look up by barcode instead). This ensures blank-SKU / UPC-only
+  // products (e.g. Lucila Ivory 42) still get their fresh Shopify stock.
+  const isRealSku = (x: string) => !!x && !x.startsWith("gid://");
+  const bySkuItems = tracked.filter((t) => isRealSku(t.sku));
+  const byBarcodeItems = tracked.filter((t) => !isRealSku(t.sku) && t.barcode);
+
   let refreshed = 0;
-  for (const it of found) {
-    await db.catalogItem.updateMany({
-      where: { tenantId, sku: it.sku },
-      data: { barcode: it.barcode, inventory: it.inventory, price: it.price, title: it.title, imageUrl: it.imageUrl },
-    });
-    refreshed++;
+
+  // 1) Look up real-SKU items by SKU.
+  if (bySkuItems.length) {
+    const { found } = await fetchShopifyByIdentifiers(conn as any, bySkuItems.map((t) => t.sku), "sku");
+    for (const it of found) {
+      await db.catalogItem.updateMany({
+        where: { tenantId, sku: it.sku },
+        data: { barcode: it.barcode, inventory: it.inventory, price: it.price, title: it.title, imageUrl: it.imageUrl },
+      });
+      refreshed++;
+    }
   }
+
+  // 2) Look up blank/GID-SKU items by BARCODE, update by barcode.
+  if (byBarcodeItems.length) {
+    const { found } = await fetchShopifyByIdentifiers(conn as any, byBarcodeItems.map((t) => t.barcode!), "barcode");
+    for (const it of found) {
+      if (!it.barcode) continue;
+      await db.catalogItem.updateMany({
+        where: { tenantId, barcode: it.barcode },
+        data: { inventory: it.inventory, price: it.price, title: it.title, imageUrl: it.imageUrl },
+      });
+      refreshed++;
+    }
+  }
+
   return { refreshed };
 }
 
