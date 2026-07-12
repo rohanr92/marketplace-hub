@@ -54,15 +54,15 @@ const FILTERS = [
 
 const PAGE_SIZE = 20;
 
-function fmtDate(iso) {
+function fmtDate(iso?: string) {
   if (!iso) return "\u2014";
   try { return new Date(iso).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }); }
   catch { return iso.slice(0, 10); }
 }
 
-function reasonLabel(code) {
+function reasonLabel(code?: string | null) {
   if (!code) return "\u2014";
-  return code.replace(/^RETURN_/, "").replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+  return code.replace(/^RETURN_/, "").replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c: string) => c.toUpperCase());
 }
 
 export default function Returns() {
@@ -82,11 +82,11 @@ export default function Returns() {
   useEffect(() => { load("ALL"); }, []);
   useEffect(() => { setPage(1); }, [filter]);
 
-  const allReturns = data?.returns ?? [];
-  const returns = filter === "ALL" ? allReturns : allReturns.filter((r) => (r.state || "").toUpperCase() === filter);
+  const allReturns: any[] = data?.returns ?? [];
+  const returns = filter === "ALL" ? allReturns : allReturns.filter((r: any) => (r.state || "").toUpperCase() === filter);
   const totalPages = Math.max(1, Math.ceil(returns.length / PAGE_SIZE));
   const pageRows = returns.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  const counts = {};
+  const counts: Record<string, number> = {};
   for (const r of allReturns) { const st = (r.state || "UNKNOWN").toUpperCase(); counts[st] = (counts[st] || 0) + 1; }
   const totalCount = allReturns.length;
 
