@@ -401,5 +401,4 @@ export async function fetchMiraklReturns(
   }
 
   return { data: all, unsupported };
-};
 }
