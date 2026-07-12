@@ -368,29 +368,38 @@ export async function fetchOfferUpcByProductSku(
 // Some marketplaces (e.g. Kohl's) don't expose this endpoint -> returns empty gracefully.
 export async function fetchMiraklReturns(
   conn: Conn,
-  opts: { max?: number; pageToken?: string; state?: string } = {}
+  opts: { state?: string } = {}
 ) {
-  const params = new URLSearchParams();
-  params.set("max", String(opts.max ?? 50));
-  if (opts.pageToken) params.set("page_token", opts.pageToken);
-  if (opts.state) params.set("return_state", opts.state);
+  // Mirakl returns API uses token-based pagination. Loop next_page_token to get ALL.
+  const all: any[] = [];
+  let pageToken: string | null = null;
+  let unsupported = false;
 
-  const res = await fetch(`${conn.baseUrl}/api/returns?${params.toString()}`, {
-    headers: authHeaders(conn),
-  });
+  for (let guard = 0; guard < 50; guard++) {
+    const params = new URLSearchParams();
+    params.set("max", "100");
+    if (pageToken) params.set("page_token", pageToken);
+    if (opts.state) params.set("return_state", opts.state);
 
-  if (res.status === 404) return { data: [], next_page_token: null, unsupported: true };
-  if (res.status === 429) {
-    const retry = Number(res.headers.get("Retry-After") ?? "60");
-    throw new Error(`RATE_LIMIT:${retry}`);
+    const res = await fetch(`${conn.baseUrl}/api/returns?${params.toString()}`, {
+      headers: authHeaders(conn),
+    });
+
+    if (res.status === 404) { unsupported = true; break; }
+    if (res.status === 429) {
+      const retry = Number(res.headers.get("Retry-After") ?? "60");
+      throw new Error(`RATE_LIMIT:${retry}`);
+    }
+    if (!res.ok) throw new Error(`Mirakl returns HTTP ${res.status}`);
+
+    const json: any = await res.json();
+    const page = json?.data ?? [];
+    all.push(...page);
+
+    pageToken = json?.next_page_token ?? null;
+    if (!pageToken || page.length === 0) break;
   }
-  if (!res.ok) throw new Error(`Mirakl returns HTTP ${res.status}`);
 
-  const json: any = await res.json();
-  return {
-    data: json?.data ?? [],
-    next_page_token: json?.next_page_token ?? null,
-    previous_page_token: json?.previous_page_token ?? null,
-    unsupported: false,
-  };
+  return { data: all, unsupported };
+};
 }

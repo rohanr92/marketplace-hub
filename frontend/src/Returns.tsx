@@ -79,13 +79,16 @@ export default function Returns() {
       .catch((e: any) => { setErr(e.message || "Failed to load returns"); setLoading(false); });
   }
 
-  useEffect(() => { load(filter); setPage(1); }, [filter]);
+  useEffect(() => { load("ALL"); }, []);
+  useEffect(() => { setPage(1); }, [filter]);
 
-  const returns = data?.returns ?? [];
+  const allReturns = data?.returns ?? [];
+  const returns = filter === "ALL" ? allReturns : allReturns.filter((r) => (r.state || "").toUpperCase() === filter);
   const totalPages = Math.max(1, Math.ceil(returns.length / PAGE_SIZE));
   const pageRows = returns.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  const counts = data?.stateCounts ?? {};
-  const totalCount = data?.count ?? 0;
+  const counts = {};
+  for (const r of allReturns) { const st = (r.state || "UNKNOWN").toUpperCase(); counts[st] = (counts[st] || 0) + 1; }
+  const totalCount = allReturns.length;
 
   return (
     <Shell>
