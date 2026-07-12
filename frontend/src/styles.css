@@ -109,3 +109,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .table-scroll { width: 100%; overflow-x: auto; }
 .main { min-width: 0; }            /* let the main column shrink instead of overflowing the grid */
 /* horizontal overflow is contained by .table-scroll, not the shell (which would break sticky) */
+
+/* Loading spinner */
+.spinner { width: 32px; height: 32px; border: 3px solid #e6e8ee; border-top-color: #3b5bfd; border-radius: 50%; animation: spin .7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }

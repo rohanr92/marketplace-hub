@@ -86,8 +86,7 @@ export default function Returns() {
   const returns = filter === "ALL" ? allReturns : allReturns.filter((r: any) => (r.state || "").toUpperCase() === filter);
   const totalPages = Math.max(1, Math.ceil(returns.length / PAGE_SIZE));
   const pageRows = returns.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  const counts: Record<string, number> = {};
-  for (const r of allReturns) { const st = (r.state || "UNKNOWN").toUpperCase(); counts[st] = (counts[st] || 0) + 1; }
+  const counts: Record<string, number> = data?.stateCounts ?? {};
   const totalCount = allReturns.length;
 
   return (
@@ -102,8 +101,8 @@ export default function Returns() {
       </div>
 
       {data?.channelStatus?.some((c: any) => !c.supported) && (
-        <div className="toast" style={{ marginBottom: 16, background: "#fff8e6", color: "#8a6d00", border: "1px solid #f0e0a8" }}>
-          Returns API not available for: {data.channelStatus.filter((c: any) => !c.supported).map((c: any) => c.channel).join(", ")}
+        <div className="conn-sub" style={{ marginBottom: 14, fontSize: 12 }}>
+          Note: {data.channelStatus.filter((c: any) => !c.supported).map((c: any) => (c.channel || "").replace(/\s*-\s*.*/, "")).join(", ")} does not provide returns via API.
         </div>
       )}
 
