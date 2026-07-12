@@ -101,7 +101,7 @@ export default function Settings() {
             <button key={k} onClick={() => setTab(k)}
               style={{
                 background: "none", border: "none", borderBottom: tab === k ? "2px solid #3b5bfd" : "2px solid transparent",
-                color: tab === k ? "#f2f3f5" : "#8b8d98", padding: "8px 14px", fontSize: 14, cursor: "pointer", fontWeight: 600,
+                color: tab === k ? "#1a2233" : "#6b7488", padding: "8px 14px", fontSize: 14, cursor: "pointer", fontWeight: 600,
               }}>{label}</button>
           ))}
         </div>
