@@ -35,7 +35,7 @@ async function reconcileAllTenants() {
 }
 // Full inventory reconcile every day (instant path is the webhook).
 // Catches anything a missed webhook dropped. Runs at 00:00 daily.
-cron.schedule("0 */12 * * *", reconcileAllTenants);
+cron.schedule("0 */6 * * *", reconcileAllTenants);
 
 // --- Log cleanup: delete sync logs older than 6h, hourly ---
 cron.schedule("0 * * * *", async () => {
