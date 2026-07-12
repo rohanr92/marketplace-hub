@@ -91,6 +91,20 @@ export async function analyticsRoutes(app: FastifyInstance) {
       .map((c) => ({ label: c.label, orders: c.orders, sales: Number(c.sales.toFixed(2)) }))
       .sort((a, b) => b.sales - a.sales);
 
+    // Action counts for the "Take action" panel.
+    const pendingOrders = await db.order.count({
+      where: { tenantId: req.tenantId, state: { in: ["awaiting_acceptance", "waiting_acceptance", "shipping", "to_accept"] } },
+    });
+    const refundOrders = await db.order.count({
+      where: { tenantId: req.tenantId, refundedAmount: { gt: 0 } },
+    });
+    const trackedItems = await db.catalogItem.count({
+      where: { tenantId: req.tenantId, tracked: true },
+    });
+    const activeChannels = await db.connection.count({
+      where: { tenantId: req.tenantId, type: "mirakl", active: true },
+    });
+
     return {
       days,
       totalSales: Number(totalSales.toFixed(2)),
@@ -99,6 +113,7 @@ export async function analyticsRoutes(app: FastifyInstance) {
       avgOrderValue: orderCount ? Number((totalSales / orderCount).toFixed(2)) : 0,
       series,
       channels,
+      actions: { pendingOrders, refundOrders, trackedItems, activeChannels },
     };
   });
 }
