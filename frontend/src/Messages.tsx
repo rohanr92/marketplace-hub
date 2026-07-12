@@ -5,10 +5,21 @@ import { api } from "./api";
 function when(d: string) {
   if (!d) return "";
   const dt = new Date(d);
-  return dt.toLocaleDateString() + " " + dt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const now = new Date();
+  const sameDay = dt.toDateString() === now.toDateString();
+  return sameDay
+    ? dt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    : dt.toLocaleDateString([], { month: "short", day: "numeric" });
 }
 
-// Build the list of recipients you can send to (everyone except your own shop).
+function channelBrand(name: string) {
+  const n = (name || "").toLowerCase();
+  if (n.includes("nordstrom")) return { short: "NORD", bg: "#000" };
+  if (n.includes("macy")) return { short: "MACY'S", bg: "#e21a2c" };
+  if (n.includes("kohl")) return { short: "KOHL'S", bg: "#000" };
+  return { short: (name || "?").replace(/\s*-\s*.*/, "").slice(0, 6).toUpperCase(), bg: "#3b5bfd" };
+}
+
 function recipientOptions(thread: any) {
   const seen = new Map<string, { id?: string; type: string; label: string }>();
   const pools = [thread?.current_participants ?? [], thread?.authorized_participants ?? []];
@@ -26,6 +37,7 @@ export default function Messages() {
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
+  const [filter, setFilter] = useState("ALL");
   const [active, setActive] = useState<any>(null);
   const [thread, setThread] = useState<any>(null);
   const [threadLoading, setThreadLoading] = useState(false);
@@ -53,7 +65,6 @@ export default function Messages() {
         setThread(d.thread);
         const opts = recipientOptions(d.thread);
         setRecipients(opts);
-        // default: select all available recipients
         const sel: Record<string, boolean> = {};
         opts.forEach((o) => { sel[o.type + (o.id ?? "")] = true; });
         setSelected(sel);
@@ -80,103 +91,170 @@ export default function Messages() {
       .finally(() => setSending(false));
   }
 
+  const replyNeededCount = items.filter((i) => i.replyNeeded).length;
+  const shown = filter === "REPLY" ? items.filter((i) => i.replyNeeded) : items;
+
   return (
     <Shell>
-      <div style={{ padding: 24 }}>
-        <h1 style={{ color: "#f2f3f5", fontSize: 22, margin: "0 0 20px" }}>Messages</h1>
-        {err ? <div style={{ color: "#ff6b6b", marginBottom: 12 }}>{err}</div> : null}
-        <div style={{ display: "flex", gap: 16, height: "calc(100vh - 140px)" }}>
+      <div className="page-head">
+        <div>
+          <h2 style={{ margin: 0 }}>Messages</h2>
+          <div className="conn-sub" style={{ marginTop: 4 }}>Customer & marketplace conversations</div>
+        </div>
+      </div>
 
-          <div style={{ width: 360, background: "#15161b", border: "1px solid #26272f", borderRadius: 12, overflowY: "auto" }}>
-            {loading ? (
-              <div style={{ color: "#8b8d98", padding: 16 }}>Loading inbox...</div>
-            ) : items.length === 0 ? (
-              <div style={{ color: "#6b6d78", padding: 16 }}>No messages.</div>
-            ) : (
-              items.map((it) => (
+      {err && <div className="toast bad" style={{ marginBottom: 14 }}>{err}</div>}
+
+      <div style={{ display: "flex", gap: 6, marginBottom: 16 }}>
+        {[["ALL", "All", items.length], ["REPLY", "Reply needed", replyNeededCount]].map(([k, label, n]) => {
+          const activeTab = filter === k;
+          return (
+            <button key={k as string} onClick={() => setFilter(k as string)}
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 7,
+                padding: "8px 14px", borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: "pointer",
+                border: activeTab ? "1px solid #3b5bfd" : "1px solid #e6e8ee",
+                background: activeTab ? "#3b5bfd" : "#fff",
+                color: activeTab ? "#fff" : "#1a2233",
+              }}>
+              {label}
+              <span style={{
+                fontSize: 11, fontWeight: 700, padding: "1px 7px", borderRadius: 20,
+                background: activeTab ? "rgba(255,255,255,.22)" : (k === "REPLY" && (n as number) > 0 ? "#fde8e8" : "#eceef2"),
+                color: activeTab ? "#fff" : (k === "REPLY" && (n as number) > 0 ? "#dc2626" : "#6b7488"),
+              }}>{n as number}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div style={{ display: "flex", gap: 16, height: "calc(100vh - 220px)", minHeight: 460 }}>
+        {/* Inbox list */}
+        <div className="card" style={{ width: 340, padding: 0, overflowY: "auto", flexShrink: 0 }}>
+          {loading ? (
+            <div className="empty" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "40px 0" }}>
+              <div className="spinner" /><span>Loading inbox…</span>
+            </div>
+          ) : shown.length === 0 ? (
+            <div className="empty">{filter === "REPLY" ? "No messages need a reply." : "No messages yet."}</div>
+          ) : (
+            shown.map((it) => {
+              const b = channelBrand(it.channel);
+              const isActive = active?.threadId === it.threadId;
+              return (
                 <div key={it.threadId} onClick={() => openThread(it)}
                   style={{
-                    padding: "12px 14px", borderBottom: "1px solid #26272f", cursor: "pointer",
-                    background: active?.threadId === it.threadId ? "#1c1d24" : "transparent",
+                    padding: "13px 15px", borderBottom: "1px solid #eef0f4", cursor: "pointer",
+                    background: isActive ? "#eef1ff" : "transparent",
+                    borderLeft: isActive ? "3px solid #3b5bfd" : "3px solid transparent",
                   }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <span style={{ color: "#f2f3f5", fontSize: 14, fontWeight: 600 }}>{it.topic}</span>
-                    {it.replyNeeded ? (
-                      <span style={{ background: "#3a1f1f", color: "#ff8080", fontSize: 11, padding: "2px 7px", borderRadius: 6 }}>Reply needed</span>
-                    ) : null}
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                    <span style={{
+                      display: "inline-flex", alignItems: "center", justifyContent: "center",
+                      minWidth: 46, height: 20, padding: "0 6px", borderRadius: 5,
+                      background: b.bg, color: "#fff", fontSize: 9, fontWeight: 800, flexShrink: 0,
+                    }}>{b.short}</span>
+                    <span style={{ fontSize: 11, color: "#8a92a3", marginLeft: "auto" }}>{when(it.lastMessageDate)}</span>
                   </div>
-                  <div style={{ color: "#8b8d98", fontSize: 12, marginTop: 4 }}>{it.channelOrderId} &middot; {it.channel}</div>
-                  <div style={{ color: "#6b6d78", fontSize: 11, marginTop: 3 }}>Last: {it.lastSender} &middot; {when(it.lastMessageDate)}</div>
+                  <div style={{ fontWeight: 600, fontSize: 14, color: "#1a2233", marginTop: 8, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {it.topic}
+                  </div>
+                  <div style={{ color: "#6b7488", fontSize: 12, marginTop: 3 }}>#{it.channelOrderId}</div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 7 }}>
+                    <span style={{ color: "#8a92a3", fontSize: 11, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 170 }}>
+                      {it.lastSender || "—"}
+                    </span>
+                    {it.replyNeeded && (
+                      <span style={{ background: "#fde8e8", color: "#dc2626", fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 20, flexShrink: 0 }}>
+                        Reply needed
+                      </span>
+                    )}
+                  </div>
                 </div>
-              ))
-            )}
-          </div>
+              );
+            })
+          )}
+        </div>
 
-          <div style={{ flex: 1, background: "#15161b", border: "1px solid #26272f", borderRadius: 12, display: "flex", flexDirection: "column" }}>
-            {!active ? (
-              <div style={{ color: "#6b6d78", padding: 24 }}>Select a message to view.</div>
-            ) : (
-              <>
-                <div style={{ padding: "14px 18px", borderBottom: "1px solid #26272f" }}>
-                  <div style={{ color: "#f2f3f5", fontSize: 16, fontWeight: 600 }}>{active.topic}</div>
-                  <div style={{ color: "#8b8d98", fontSize: 12, marginTop: 3 }}>Order {active.channelOrderId}</div>
+        {/* Conversation pane */}
+        <div className="card" style={{ flex: 1, padding: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+          {!active ? (
+            <div className="empty" style={{ margin: "auto", textAlign: "center", color: "#8a92a3" }}>
+              Select a conversation to view messages
+            </div>
+          ) : (
+            <>
+              <div style={{ padding: "16px 20px", borderBottom: "1px solid #eef0f4", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: "#1a2233" }}>{active.topic}</div>
+                  <div style={{ color: "#6b7488", fontSize: 12, marginTop: 3 }}>{active.channel} · Order #{active.channelOrderId}</div>
                 </div>
+                {(() => { const b = channelBrand(active.channel); return (
+                  <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: 54, height: 26, padding: "0 8px", borderRadius: 6, background: b.bg, color: "#fff", fontSize: 11, fontWeight: 800 }}>{b.short}</span>
+                ); })()}
+              </div>
 
-                <div style={{ flex: 1, overflowY: "auto", padding: 18 }}>
-                  {threadLoading ? (
-                    <div style={{ color: "#8b8d98" }}>Loading thread...</div>
-                  ) : (
-                    (thread?.messages ?? []).map((m: any) => {
-                      const mine = m.from?.type === "SHOP_USER" || m.from?.type === "SHOP";
-                      return (
-                        <div key={m.id} style={{ marginBottom: 14, display: "flex", flexDirection: "column", alignItems: mine ? "flex-end" : "flex-start" }}>
-                          <div style={{ color: "#8b8d98", fontSize: 11, marginBottom: 4 }}>
-                            {m.from?.display_name ?? "Unknown"} &middot; {when(m.date_created)}
-                          </div>
-                          <div style={{
-                            maxWidth: "75%", whiteSpace: "pre-wrap", fontSize: 13, lineHeight: 1.5,
-                            background: mine ? "#1d2a1d" : "#1c1d24",
-                            color: "#e0e1e6", padding: "10px 14px", borderRadius: 10, border: "1px solid #2a2b33",
-                          }}>{m.body}</div>
+              <div style={{ flex: 1, overflowY: "auto", padding: 20, background: "#fafbfc" }}>
+                {threadLoading ? (
+                  <div className="empty" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "40px 0" }}>
+                    <div className="spinner" /><span>Loading conversation…</span>
+                  </div>
+                ) : (thread?.messages ?? []).length === 0 ? (
+                  <div className="empty">No messages in this thread.</div>
+                ) : (
+                  (thread?.messages ?? []).map((m: any) => {
+                    const mine = m.from?.type === "SHOP_USER" || m.from?.type === "SHOP";
+                    return (
+                      <div key={m.id} style={{ marginBottom: 16, display: "flex", flexDirection: "column", alignItems: mine ? "flex-end" : "flex-start" }}>
+                        <div style={{ color: "#8a92a3", fontSize: 11, marginBottom: 5, padding: "0 4px" }}>
+                          {m.from?.display_name ?? "Unknown"} · {when(m.date_created)}
                         </div>
-                      );
-                    })
-                  )}
-                </div>
+                        <div style={{
+                          maxWidth: "72%", whiteSpace: "pre-wrap", fontSize: 13.5, lineHeight: 1.55,
+                          background: mine ? "#3b5bfd" : "#fff",
+                          color: mine ? "#fff" : "#1a2233",
+                          padding: "11px 15px", borderRadius: 14,
+                          borderBottomRightRadius: mine ? 4 : 14, borderBottomLeftRadius: mine ? 14 : 4,
+                          border: mine ? "none" : "1px solid #e6e8ee",
+                          boxShadow: "0 1px 2px rgba(16,24,40,.04)",
+                        }}>{m.body}</div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
 
-                <div style={{ borderTop: "1px solid #26272f", padding: 14 }}>
-                  <div style={{ display: "flex", gap: 16, marginBottom: 10, alignItems: "center" }}>
-                    <span style={{ color: "#8b8d98", fontSize: 12 }}>Send to:</span>
-                    {recipients.length === 0 ? (
-                      <span style={{ color: "#6b6d78", fontSize: 12 }}>No available recipients</span>
-                    ) : recipients.map((r) => {
+              <div style={{ borderTop: "1px solid #eef0f4", padding: "14px 16px", background: "#fff" }}>
+                {recipients.length > 0 && (
+                  <div style={{ display: "flex", gap: 14, marginBottom: 10, alignItems: "center", flexWrap: "wrap" }}>
+                    <span style={{ color: "#6b7488", fontSize: 12, fontWeight: 600 }}>To:</span>
+                    {recipients.map((r) => {
                       const key = r.type + (r.id ?? "");
+                      const nice = r.type === "OPERATOR" ? "Marketplace" : r.type === "CUSTOMER" ? "Customer" : r.label;
                       return (
-                        <label key={key} style={{ color: "#d8d9e0", fontSize: 13, display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+                        <label key={key} style={{ color: "#1a2233", fontSize: 13, display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
                           <input type="checkbox" checked={!!selected[key]} onChange={() => toggle(key)} />
-                          {r.label} <span style={{ color: "#6b6d78", fontSize: 11 }}>({r.type === "OPERATOR" ? "Macy's" : r.type === "CUSTOMER" ? "Customer" : r.type})</span>
+                          {nice}
                         </label>
                       );
                     })}
                   </div>
-                  <div style={{ display: "flex", gap: 10 }}>
-                    <textarea value={reply} onChange={(e) => setReply(e.target.value)}
-                      placeholder="Type a reply..."
-                      style={{
-                        flex: 1, resize: "none", height: 60, background: "#0f1014", color: "#e0e1e6",
-                        border: "1px solid #303139", borderRadius: 8, padding: 10, fontSize: 13, fontFamily: "inherit",
-                      }} />
-                    <button onClick={send} disabled={sending || !reply.trim()}
-                      style={{
-                        background: sending || !reply.trim() ? "#3a3b44" : "#c9a227",
-                        color: "#15161b", border: "none", borderRadius: 8, padding: "0 20px",
-                        fontWeight: 600, cursor: sending || !reply.trim() ? "default" : "pointer",
-                      }}>{sending ? "Sending..." : "Send"}</button>
-                  </div>
+                )}
+                <div style={{ display: "flex", gap: 10, alignItems: "flex-end" }}>
+                  <textarea value={reply} onChange={(e) => setReply(e.target.value)}
+                    placeholder="Type your reply…"
+                    style={{
+                      flex: 1, resize: "none", height: 58, background: "#fff", color: "#1a2233",
+                      border: "1px solid #e6e8ee", borderRadius: 10, padding: "11px 13px", fontSize: 13.5, fontFamily: "inherit",
+                    }} />
+                  <button className="btn" onClick={send} disabled={sending || !reply.trim()}
+                    style={{ height: 44, opacity: sending || !reply.trim() ? 0.5 : 1 }}>
+                    {sending ? "Sending…" : "Send"}
+                  </button>
                 </div>
-              </>
-            )}
-          </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </Shell>

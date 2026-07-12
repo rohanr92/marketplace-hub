@@ -402,3 +402,40 @@ export async function fetchMiraklReturns(
 
   return { data: all, unsupported };
 }
+
+// M11: list ALL inbox threads for the shop (not per-order). Uses updated_since to
+// limit to recent activity, and seek pagination to get everything. This is the
+// correct, efficient way to build an inbox (one call per page, not one per order).
+export async function listAllThreads(
+  conn: Conn,
+  opts: { updatedSince?: string; withMessages?: boolean } = {}
+) {
+  const all: any[] = [];
+  let pageToken: string | null = null;
+
+  for (let guard = 0; guard < 40; guard++) {
+    const params = new URLSearchParams();
+    params.set("entity_type", "MMP_ORDER");
+    params.set("limit", "100");
+    if (opts.updatedSince) params.set("updated_since", opts.updatedSince);
+    if (opts.withMessages) params.set("with_messages", "true");
+    if (pageToken) params.set("page_token", pageToken);
+
+    const res = await fetch(`${conn.baseUrl}/api/inbox/threads?${params.toString()}`, {
+      headers: authHeaders(conn),
+    });
+    if (res.status === 429) {
+      const retry = Number(res.headers.get("Retry-After") ?? "60");
+      throw new Error(`RATE_LIMIT:${retry}`);
+    }
+    if (!res.ok) throw new Error(`Mirakl M11 HTTP ${res.status}: ${await res.text()}`);
+
+    const json: any = await res.json();
+    const page = json?.data ?? [];
+    all.push(...page);
+
+    pageToken = json?.next_page_token ?? json?.pagination?.next_page_token ?? null;
+    if (!pageToken || page.length === 0) break;
+  }
+  return all;
+}

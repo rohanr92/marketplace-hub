@@ -1,7 +1,7 @@
 import { FastifyInstance } from "fastify";
 import { db } from "../lib/db.js";
 import { authGuard } from "../middleware/authGuard.js";
-import { listOrderThreads, getOrderThread, replyToThread } from "../services/mirakl.js";
+import { listOrderThreads, getOrderThread, replyToThread, listAllThreads } from "../services/mirakl.js";
 
 async function connForOrder(orderRowId: string, tenantId: string) {
   const order = await db.order.findFirst({ where: { id: orderRowId, tenantId } });
@@ -58,35 +58,39 @@ export async function messagesRoutes(app: FastifyInstance) {
   });
   // Inbox: scan recent orders for threads, return a flat list (newest first)
   app.get("/inbox", async (req, reply) => {
-    const orders = await db.order.findMany({
-      where: { tenantId: req.tenantId },
-      orderBy: { channelCreatedAt: "desc" },
-      take: 60,
-    });
-    const conns = await db.connection.findMany({ where: { tenantId: req.tenantId } });
-    const connMap = new Map(conns.map((c) => [c.id, c]));
+    const conns = await db.connection.findMany({ where: { tenantId: req.tenantId, type: "mirakl", active: true } });
+    // Look back 60 days for active threads.
+    const since = new Date(Date.now() - 60 * 24 * 3600 * 1000).toISOString();
 
     const items: any[] = [];
-    for (const o of orders) {
-      const conn = connMap.get(o.connectionId);
-      if (!conn || conn.type !== "mirakl") continue;
+    for (const conn of conns) {
       try {
-        const threads = await listOrderThreads(conn, o.channelOrderId);
+        const threads = await listAllThreads(
+          { baseUrl: conn.baseUrl, apiKeyEnc: conn.apiKeyEnc },
+          { updatedSince: since }
+        );
         for (const t of threads) {
+          // entity gives us the order id
+          const orderEntity = (t.entities ?? []).find((e: any) => e.type === "MMP_ORDER") ?? (t.entities ?? [])[0];
+          const channelOrderId = orderEntity?.id ?? "";
+          // map to our hub order row (for reply/thread fetch)
+          const order = channelOrderId
+            ? await db.order.findFirst({ where: { tenantId: req.tenantId, channelOrderId, connectionId: conn.id } })
+            : null;
           items.push({
-            orderRowId: o.id,
-            channelOrderId: o.channelOrderId,
+            orderRowId: order?.id ?? null,
+            channelOrderId: channelOrderId || (orderEntity?.label ?? "—"),
             channel: conn.label,
             threadId: t.id,
-            topic: t?.topic?.value ?? "Message",
+            topic: t?.topic?.value ?? orderEntity?.label ?? "Message",
             lastMessageDate: t?.metadata?.last_message_date ?? t?.date_updated,
             lastSender: t?.metadata?.last_sender?.display_name ?? "",
             replyNeeded: !!t?.metadata?.shop_reply_needed_since,
             count: t?.metadata?.total_count ?? 0,
           });
         }
-      } catch {
-        // skip orders whose thread fetch fails
+      } catch (e: any) {
+        if (String(e.message).startsWith("RATE_LIMIT")) continue;
       }
     }
     items.sort((a, b) => (b.lastMessageDate ?? "").localeCompare(a.lastMessageDate ?? ""));
