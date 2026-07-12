@@ -336,3 +336,30 @@ export async function downloadMiraklDocument(
   const filename = m ? m[1] : `packing-slip-${documentId}.pdf`;
   return { buffer, contentType, filename };
 }
+
+// Fetch the UPC/barcode for a product from its OFFER (OF21). Different marketplaces
+// expose the UPC differently: Nordstrom uses reference_type "upc", Kohl's uses
+// "uid_code", Macy's uses "UPC". This reads whichever is present. Returns UPC or null.
+export async function fetchOfferUpcByProductSku(
+  conn: { baseUrl: string; apiKeyEnc: string },
+  productSku: string
+): Promise<string | null> {
+  try {
+    const apiKey = decrypt(conn.apiKeyEnc);
+    const res = await fetch(`${conn.baseUrl}/api/offers?product_id=${encodeURIComponent(productSku)}&max=5`, {
+      headers: { Authorization: apiKey, Accept: "application/json" },
+    });
+    if (!res.ok) return null;
+    const data: any = await res.json();
+    for (const offer of (data.offers ?? [])) {
+      const refs = offer.product_references ?? [];
+      const upc = refs.find((r: any) =>
+        /UPC|EAN|GTIN|UID_CODE/i.test(r.reference_type ?? r.type ?? "")
+      )?.reference;
+      if (upc) return String(upc).trim();
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}

@@ -1,7 +1,7 @@
 import { config } from "../lib/config.js";
 import { db } from "../lib/db.js";
 import { shopifyGraphQL, fetchShopifyByIdentifiers } from "./shopify.js";
-import { fetchMiraklOrderById, listMiraklOrderDocuments } from "./mirakl.js";
+import { fetchMiraklOrderById, listMiraklOrderDocuments, fetchOfferUpcByProductSku } from "./mirakl.js";
 
 const PUSHABLE = new Set(["SHIPPING"]);
 
@@ -57,19 +57,38 @@ export async function pushOrderToShopify(orderRowId: string, tenantId: string) {
       if (bySku.found[0]) variantId = bySku.found[0].shopifyVariantId;
     }
 
-    // 2. Try UPC. Macy's puts UPC as the prefix of product_sku: "UPC_productid_variant".
+    // 2. Try UPC/barcode. Each marketplace exposes it differently:
+    //    - Kohl's: product_sku IS the UPC (e.g. "810205990132")
+    //    - Macy's: UPC is the prefix of product_sku before "_" (e.g. "810205994871_...")
+    //    - Nordstrom: UPC only on the OFFER (product_references), product_sku is internal id
     if (!variantId) {
       const candidates: string[] = [];
+      // 2a. UPC on the order line itself (rare, but check)
       const refs = l.product_references ?? [];
-      const refUpc = refs.find((r: any) => /UPC|EAN|GTIN/i.test(r.reference_type ?? r.type ?? ""))?.reference;
+      const refUpc = refs.find((r: any) => /UPC|EAN|GTIN|UID_CODE/i.test(r.reference_type ?? r.type ?? ""))?.reference;
       if (refUpc) candidates.push(String(refUpc).trim());
+      // 2b. product_sku with "_" -> prefix is UPC (Macy's)
       if (l.product_sku && String(l.product_sku).includes("_")) {
         candidates.push(String(l.product_sku).split("_")[0].trim());
       }
+      // 2c. product_sku directly as barcode (Kohl's: product_sku is the UPC)
+      if (l.product_sku && !String(l.product_sku).includes("_")) {
+        candidates.push(String(l.product_sku).trim());
+      }
+      // Try all candidates gathered so far as barcodes
       for (const upc of candidates) {
         if (!upc) continue;
         const byUpc = await fetchShopifyByIdentifiers(shopifyConn, [upc], "barcode");
         if (byUpc.found[0]) { variantId = byUpc.found[0].shopifyVariantId; break; }
+      }
+      // 2d. Last resort: fetch the OFFER and read its UPC (Nordstrom path).
+      //     Only if still unmatched and we have a product_sku to look up.
+      if (!variantId && l.product_sku) {
+        const offerUpc = await fetchOfferUpcByProductSku(miraklConn as any, String(l.product_sku).trim());
+        if (offerUpc) {
+          const byOfferUpc = await fetchShopifyByIdentifiers(shopifyConn, [offerUpc], "barcode");
+          if (byOfferUpc.found[0]) variantId = byOfferUpc.found[0].shopifyVariantId;
+        }
       }
     }
 
@@ -137,7 +156,7 @@ export async function pushOrderToShopify(orderRowId: string, tenantId: string) {
         userErrors { field message }
       }
     }`,
-    { order: input, options: { inventoryBehaviour: "DECREMENT_OBEYING_POLICY" } }
+    { order: input, options: { inventoryBehaviour: "DECREMENT_IGNORING_POLICY" } }
   );
   const errs = data?.orderCreate?.userErrors ?? [];
   if (errs.length) throw new Error("Shopify orderCreate: " + JSON.stringify(errs));
