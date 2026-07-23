@@ -133,7 +133,18 @@ export async function channelReconcileRoutes(app: FastifyInstance) {
           update: { offerUpc: o.offerUpc, title: o.title },
         });
       }
-      return { pulled: offers.length };
+
+      // Prune offers that no longer exist on the marketplace. Without this the
+      // stored count only ever grows (old offers linger after they're removed).
+      // Only runs on a fully successful pull - fetchMiraklOffers throws otherwise.
+      const liveSkus = offers.map((o: any) => o.offerSku);
+      const removed = liveSkus.length
+        ? await db.channelOffer.deleteMany({
+            where: { connectionId: id, offerSku: { notIn: liveSkus } },
+          })
+        : { count: 0 };
+
+      return { pulled: offers.length, removed: removed.count };
     } catch (e: any) {
       if (String(e.message).startsWith("RATE_LIMIT:")) {
         return reply.code(429).send({ error: "Mirakl rate limit, try again shortly" });
