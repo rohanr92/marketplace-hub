@@ -60,19 +60,48 @@ export async function catalogRoutes(app: FastifyInstance) {
     try {
       const { found, notFound } = await fetchShopifyByIdentifiers(conn, body.identifiers, body.field);
       let imported = 0;
+      let updated = 0;
       for (const it of found) {
-        await db.catalogItem.upsert({
-          where: { tenantId_sku: { tenantId: req.tenantId, sku: it.sku } },
-          create: { ...it, tenantId: req.tenantId, source: "shopify", tracked: true },
-          update: {
-            barcode: it.barcode, title: it.title, description: it.description,
-            imageUrl: it.imageUrl, price: it.price, inventory: it.inventory,
-            shopifyVariantId: it.shopifyVariantId, source: "shopify", tracked: true,
-          },
+        const data = {
+          barcode: it.barcode, title: it.title, description: it.description,
+          imageUrl: it.imageUrl, price: it.price, inventory: it.inventory,
+          shopifyVariantId: it.shopifyVariantId, source: "shopify", tracked: true,
+        };
+
+        // 1) Same variant already stored? Match on the Shopify variant id first -
+        //    it's the only truly unique key.
+        let existing = it.shopifyVariantId
+          ? await db.catalogItem.findFirst({ where: { tenantId: req.tenantId, shopifyVariantId: it.shopifyVariantId } })
+          : null;
+
+        // 2) Otherwise match on barcode (what the user actually imported by).
+        if (!existing && it.barcode) {
+          existing = await db.catalogItem.findFirst({ where: { tenantId: req.tenantId, barcode: it.barcode } });
+        }
+
+        if (existing) {
+          await db.catalogItem.update({ where: { id: existing.id }, data });
+          updated++;
+          continue;
+        }
+
+        // 3) New row. Shopify SKUs are NOT unique (e.g. "nan" x153, "35" x13),
+        //    so a shared SKU would overwrite a different product. When the SKU is
+        //    missing or already taken by another variant, store the variant GID
+        //    instead - the same convention used for blank-SKU products.
+        let sku = (it.sku ?? "").trim();
+        const bad = !sku || sku.toLowerCase() === "nan";
+        const taken = sku
+          ? await db.catalogItem.findFirst({ where: { tenantId: req.tenantId, sku } })
+          : null;
+        if (bad || taken) sku = it.shopifyVariantId ?? `upc:${it.barcode ?? Math.random().toString(36).slice(2)}`;
+
+        await db.catalogItem.create({
+          data: { ...data, sku, tenantId: req.tenantId },
         });
         imported++;
       }
-      return { imported, notFound };
+      return { imported, updated, notFound };
     } catch (e: any) {
       return reply.code(400).send({ error: e.message });
     }
