@@ -41,6 +41,7 @@ export const api = {
   addCatalog: (body: any) => request("/catalog", { method: "POST", body: JSON.stringify(body) }),
   setTracked: (id: string, tracked: boolean) => request(`/catalog/${id}`, { method: "PATCH", body: JSON.stringify({ tracked }) }),
   deleteCatalog: (id: string) => request(`/catalog/${id}`, { method: "DELETE" }),
+  bulkDeleteCatalog: (ids: string[]) => request("/catalog/bulk-delete", { method: "POST", body: JSON.stringify({ ids }) }),
   sampleCatalog: () => request("/catalog/sample", { method: "POST" }),
   analyticsSummary: (days: number) => request(`/analytics/summary?days=${days}`),
   listReturns: (state?: string) => request(`/returns${state && state !== "ALL" ? `?state=${state}` : ""}`),

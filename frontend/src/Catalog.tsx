@@ -15,6 +15,7 @@ export default function Catalog() {
   const [busy, setBusy] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 50;
 
@@ -59,11 +60,42 @@ export default function Catalog() {
   const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const pageRows = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
+  const selectedIds = Object.keys(selected).filter((k) => selected[k]);
+  const allChecked = rows.length > 0 && selectedIds.length === rows.length;
+
+  function toggleOne(id: string) {
+    setSelected((p) => ({ ...p, [id]: !p[id] }));
+  }
+  function toggleAll() {
+    if (allChecked) { setSelected({}); return; }
+    const next: Record<string, boolean> = {};
+    for (const r of rows) next[r.id] = true;
+    setSelected(next);
+  }
+  async function removeSelected() {
+    if (selectedIds.length === 0) return;
+    if (!confirm(`Delete ${selectedIds.length} catalog item(s)? This cannot be undone.`)) return;
+    setBusy(true);
+    try {
+      const r = await api.bulkDeleteCatalog(selectedIds);
+      setMsg(`Deleted ${r.deleted} item(s)`);
+      setSelected({});
+      await load();
+    } catch (e: any) {
+      setMsg("Delete failed: " + e.message);
+    } finally { setBusy(false); }
+  }
+
   return (
     <Shell>
       <div className="page-head">
         <h2>Catalog</h2>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          {selectedIds.length > 0 && (
+            <button className="btn btn-danger" onClick={removeSelected} disabled={busy}>
+              Delete selected ({selectedIds.length})
+            </button>
+          )}
           <button className="btn btn-ghost" onClick={sample} disabled={busy}>Sample items</button>
           <button className="btn btn-ghost" onClick={() => setShowAdd(true)}>+ Add manually</button>
           <button className="btn btn-ghost" onClick={refresh} disabled={busy || !hasShopify}>Refresh tracked</button>
@@ -82,10 +114,11 @@ export default function Catalog() {
         {rows.length > 0 && (
           <div className="table-scroll">
           <table className="otable">
-            <thead><tr><th>Product</th><th>SKU</th><th>UPC</th><th>Price</th><th>Inventory</th><th>Sync</th><th>Source</th><th></th></tr></thead>
+            <thead><tr><th style={{ width: 36 }}><input type="checkbox" aria-label="Select all" checked={allChecked} onChange={toggleAll} /></th><th>Product</th><th>SKU</th><th>UPC</th><th>Price</th><th>Inventory</th><th>Sync</th><th>Source</th><th></th></tr></thead>
             <tbody>
               {pageRows.map((it) => (
                 <tr key={it.id}>
+                  <td><input type="checkbox" checked={!!selected[it.id]} onChange={() => toggleOne(it.id)} /></td>
                   <td>
                     <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
                       <div className="thumb">{it.imageUrl ? <img src={it.imageUrl} /> : "IMG"}</div>

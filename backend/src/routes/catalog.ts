@@ -141,6 +141,19 @@ export async function catalogRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
+  // Bulk delete catalog items (tenant-scoped). Pass { ids: [...] } or { all: true }.
+  app.post("/catalog/bulk-delete", async (req, reply) => {
+    const body = req.body as { ids?: string[]; all?: boolean };
+    if (body?.all) {
+      const r = await db.catalogItem.deleteMany({ where: { tenantId: req.tenantId } });
+      return { deleted: r.count };
+    }
+    const ids = Array.isArray(body?.ids) ? body.ids : [];
+    if (ids.length === 0) return reply.code(400).send({ error: "No ids provided" });
+    const r = await db.catalogItem.deleteMany({ where: { tenantId: req.tenantId, id: { in: ids } } });
+    return { deleted: r.count };
+  });
+
   app.post("/catalog/sample", async (req) => {
     const samples = [
       { sku: "VERA-TAN-W36", barcode: "8439990001", title: "Vera Flat Sandal - W36", price: 89, inventory: 12, imageUrl: "", description: "Handcrafted Spanish leather flat sandal." },
