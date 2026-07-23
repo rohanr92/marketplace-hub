@@ -88,20 +88,31 @@ export async function fetchMiraklOffers(conn: { baseUrl: string; apiKeyEnc: stri
   const all: any[] = [];
   let offset = 0;
   const max = 100;
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
   while (true) {
-    const res = await fetch(`${conn.baseUrl}/api/offers?max=${max}&offset=${offset}`, {
-      headers: { Authorization: apiKey, Accept: "application/json" },
-    });
-    if (res.status === 429) {
-      const retry = Number(res.headers.get("Retry-After") ?? "60");
-      throw new Error(`RATE_LIMIT:${retry}`);
+    let data: any = null;
+
+    // Retry THIS page on 429 instead of aborting the whole pull (which used to
+    // restart from offset 0 and trip the limit again immediately).
+    for (let attempt = 0; attempt < 6; attempt++) {
+      const res = await fetch(`${conn.baseUrl}/api/offers?max=${max}&offset=${offset}`, {
+        headers: { Authorization: apiKey, Accept: "application/json" },
+      });
+      if (res.status === 429) {
+        const retry = Math.min(Number(res.headers.get("Retry-After") ?? "20") || 20, 90);
+        if (attempt === 5) throw new Error(`RATE_LIMIT:${retry}`);
+        await sleep(retry * 1000);
+        continue;
+      }
+      if (!res.ok) throw new Error(`Mirakl OF21 HTTP ${res.status}`);
+      data = await res.json();
+      break;
     }
-    if (!res.ok) throw new Error(`Mirakl OF21 HTTP ${res.status}`);
-    const data: any = await res.json();
+    if (!data) throw new Error("Mirakl OF21: no response");
+
     const offers = data?.offers ?? [];
     for (const o of offers) {
-      // product_references holds identifiers like UPC/EAN/GTIN
       const refs = o.product_references ?? [];
       const upcRef = refs.find((r: any) =>
         /UPC|EAN|GTIN|UID_CODE/i.test(r.reference_type ?? r.type ?? "")
@@ -114,9 +125,13 @@ export async function fetchMiraklOffers(conn: { baseUrl: string; apiKeyEnc: stri
         active: o.active ?? true,
       });
     }
+
     const total = data?.total_count ?? all.length;
     offset += max;
     if (offset >= total || offers.length === 0) break;
+
+    // Pace requests so a large catalog doesn't trip the rate limit.
+    await sleep(500);
   }
   return all;
 }

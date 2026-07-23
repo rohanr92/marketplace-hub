@@ -137,6 +137,11 @@ export async function catalogRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const item = await db.catalogItem.findFirst({ where: { id, tenantId: req.tenantId } });
     if (!item) return reply.code(404).send({ error: "Not found" });
+    // Clear any channel-offer mappings pointing at this item so it stops counting as matched.
+    await db.channelOffer.updateMany({
+      where: { tenantId: req.tenantId, catalogItemId: id },
+      data: { catalogItemId: null },
+    });
     await db.catalogItem.delete({ where: { id } });
     return { ok: true };
   });
@@ -145,11 +150,19 @@ export async function catalogRoutes(app: FastifyInstance) {
   app.post("/catalog/bulk-delete", async (req, reply) => {
     const body = req.body as { ids?: string[]; all?: boolean };
     if (body?.all) {
+      await db.channelOffer.updateMany({
+        where: { tenantId: req.tenantId, catalogItemId: { not: null } },
+        data: { catalogItemId: null },
+      });
       const r = await db.catalogItem.deleteMany({ where: { tenantId: req.tenantId } });
       return { deleted: r.count };
     }
     const ids = Array.isArray(body?.ids) ? body.ids : [];
     if (ids.length === 0) return reply.code(400).send({ error: "No ids provided" });
+    await db.channelOffer.updateMany({
+      where: { tenantId: req.tenantId, catalogItemId: { in: ids } },
+      data: { catalogItemId: null },
+    });
     const r = await db.catalogItem.deleteMany({ where: { tenantId: req.tenantId, id: { in: ids } } });
     return { deleted: r.count };
   });
