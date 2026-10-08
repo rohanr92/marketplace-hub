@@ -66,6 +66,43 @@ export async function channelSettingsRoutes(app: FastifyInstance) {
     return rule;
   });
 
+  // Bulk add buffer rules. Paste many SKUs/UPCs at once; amount 0 = exempt from buffer (send full stock).
+  app.post("/channels/:id/buffer-rules/bulk", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const conn = await db.connection.findFirst({ where: { id, tenantId: req.tenantId } });
+    if (!conn) return reply.code(404).send({ error: "Not found" });
+    const b = z.object({
+      scope: z.enum(["sku", "upc", "title"]),
+      values: z.array(z.string()).min(1),
+      amount: z.number().int().min(0),
+    }).parse(req.body);
+
+    const values = [...new Set(b.values.map((v) => v.trim()).filter(Boolean))];
+    if (values.length === 0) return reply.code(400).send({ error: "No values provided" });
+
+    // Values that already have a rule of this scope -> update amount; others -> create.
+    const existing = await db.bufferRule.findMany({
+      where: { connectionId: id, scope: b.scope, value: { in: values } },
+    });
+    const byValue = new Map(existing.map((r) => [r.value, r]));
+
+    let added = 0, updated = 0;
+    for (const value of values) {
+      const prior = byValue.get(value);
+      if (prior) {
+        if (prior.amount !== b.amount) {
+          await db.bufferRule.update({ where: { id: prior.id }, data: { amount: b.amount } });
+          updated++;
+        }
+      } else {
+        await db.bufferRule.create({ data: { tenantId: req.tenantId, connectionId: id, scope: b.scope, value, amount: b.amount } });
+        added++;
+      }
+    }
+    await autoSyncIfEnabled(id, req.tenantId);
+    return { added, updated, total: values.length };
+  });
+
   app.delete("/channels/:id/buffer-rules/:ruleId", async (req, reply) => {
     const { ruleId } = req.params as { id: string; ruleId: string };
     const rule = await db.bufferRule.findFirst({ where: { id: ruleId, tenantId: req.tenantId } });

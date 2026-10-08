@@ -53,6 +53,8 @@ export const api = {
   addBufferRule: (id: string, scope: string, value: string, amount: number) =>
     request(`/channels/${id}/buffer-rules`, { method: "POST", body: JSON.stringify({ scope, value, amount }) }),
   deleteBufferRule: (id: string, ruleId: string) => request(`/channels/${id}/buffer-rules/${ruleId}`, { method: "DELETE" }),
+  bulkAddBufferRules: (id: string, scope: string, values: string[], amount: number) =>
+    request(`/channels/${id}/buffer-rules/bulk`, { method: "POST", body: JSON.stringify({ scope, values, amount }) }),
   mapOffer: (id: string, offerId: string, catalogItemId: string | null) =>
     request(`/channels/${id}/offers/${offerId}`, { method: "PATCH", body: JSON.stringify({ catalogItemId }) }),
   sampleOffers: (id: string) => request(`/channels/${id}/offers/sample`, { method: "POST" }),

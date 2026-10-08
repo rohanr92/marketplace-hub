@@ -35,6 +35,11 @@ export default function ChannelSettings() {
     await api.addBufferRule(id!, scope, value, amount);
     load();
   }
+  async function bulkAdd(scope: string, values: string[], amount: number) {
+    const r = await api.bulkAddBufferRules(id!, scope, values, amount);
+    load();
+    return r;
+  }
   async function delRule(ruleId: string) { await api.deleteBufferRule(id!, ruleId); load(); }
   async function mapOffer(offerId: string, catalogItemId: string) {
     await api.mapOffer(id!, offerId, catalogItemId || null);
@@ -94,6 +99,7 @@ export default function ChannelSettings() {
             onBlur={(e) => setBuffer(parseInt(e.target.value) || 0)} />
         </div>
         <RuleAdder onAdd={addRule} />
+        <BulkRuleAdder onBulk={bulkAdd} />
         {s.rules.length > 0 && (
           <table className="otable" style={{ marginTop: 14 }}>
             <thead><tr><th>Match</th><th>Value</th><th>Buffer</th><th></th></tr></thead>
@@ -115,6 +121,54 @@ export default function ChannelSettings() {
         <ManualBulkPanel id={id!} setMsg={setMsg} reload={() => { load(); setRefreshKey((k) => k + 1); }} />
       )}
     </Shell>
+  );
+}
+
+function BulkRuleAdder({ onBulk }: { onBulk: (scope: string, values: string[], amount: number) => Promise<any> }) {
+  const [scope, setScope] = useState("upc");
+  const [text, setText] = useState("");
+  const [amount, setAmount] = useState("0");
+  const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+  async function run() {
+    const values = text.split(/[\s,]+/).map((v) => v.trim()).filter(Boolean);
+    if (values.length === 0) { setMsg("Paste at least one SKU or UPC"); return; }
+    setBusy(true); setMsg("");
+    try {
+      const r = await onBulk(scope, values, parseInt(amount) || 0);
+      setMsg(`Applied to ${r.total} item(s) — added ${r.added}, updated ${r.updated}`);
+      setText("");
+    } catch (e: any) { setMsg(e.message || "Failed"); } finally { setBusy(false); }
+  }
+  return (
+    <div style={{ marginTop: 16, padding: 16, border: "1px solid #e6e8ee", borderRadius: 10, background: "#fafbfc" }}>
+      <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 2 }}>Bulk list (exempt from buffer, or set a custom buffer)</div>
+      <div className="conn-sub" style={{ marginBottom: 12 }}>Paste many SKUs or UPCs at once. Set Buffer to 0 to exempt them — those items always send full stock.</div>
+      <div style={{ display: "flex", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
+        <div className="field" style={{ margin: 0 }}>
+          <label>Match by</label>
+          <select className="loc-select" value={scope} onChange={(e) => setScope(e.target.value)}>
+            <option value="upc">By UPC</option>
+            <option value="sku">By SKU</option>
+          </select>
+        </div>
+        <div className="field" style={{ margin: 0, flex: 1, minWidth: 260 }}>
+          <label>Values (one per line, or comma / space separated)</label>
+          <textarea value={text} onChange={(e) => setText(e.target.value)} rows={4}
+            placeholder={"810205995311\n810205995328\n810205995335"}
+            style={{ width: "100%", border: "1px solid #e6e8ee", borderRadius: 8, padding: "9px 11px", fontSize: 13, fontFamily: "ui-monospace, Menlo, monospace", resize: "vertical" }} />
+        </div>
+        <div className="field" style={{ margin: 0 }}>
+          <label>Buffer</label>
+          <input type="number" min={0} value={amount} onChange={(e) => setAmount(e.target.value)} style={{ width: 90 }} />
+          <div className="conn-sub" style={{ fontSize: 11, marginTop: 4 }}>0 = no buffer</div>
+        </div>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 10 }}>
+        <button className="btn" onClick={run} disabled={busy}>{busy ? "Applying..." : "Apply to list"}</button>
+        {msg && <span className="conn-sub">{msg}</span>}
+      </div>
+    </div>
   );
 }
 
