@@ -28,7 +28,8 @@ export const api = {
   listOrders: () => request("/orders"),
   syncOrders: () => request("/orders/sync", { method: "POST" }),
   sampleOrders: () => request("/orders/sample", { method: "POST" }),
-  ordersList: (bucket: string, page: number) => request(`/orders/list?bucket=${bucket}&page=${page}&pageSize=50`),
+  ordersList: (bucket: string, page: number, search?: string, category?: string) =>
+    request(`/orders/list?bucket=${bucket}&page=${page}&pageSize=50${search ? `&search=${encodeURIComponent(search)}` : ""}${category && category !== "all" ? `&category=${category}` : ""}`),
   acceptOrder: (id: string) => request(`/orders/${id}/accept`, { method: "POST" }),
   refuseOrder: (id: string) => request(`/orders/${id}/refuse`, { method: "POST" }),
   pushOrder: (id: string) => request(`/orders/${id}/push`, { method: "POST" }),

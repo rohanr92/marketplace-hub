@@ -70,13 +70,15 @@ export default function Orders() {
   const [page, setPage] = useState(1);
   const [msg, setMsg] = useState("");
   const [busyId, setBusyId] = useState("");
+  const [search, setSearch] = useState("");
+  const [category, setCategory] = useState("all");
 
-  async function load(p = page, b = bucket) {
+  async function load(p = page, b = bucket, term = search, cat = category) {
     setLoading(true);
-    try { setData(await api.ordersList(b, p)); }
+    try { setData(await api.ordersList(b, p, term, cat)); }
     finally { setLoading(false); }
   }
-  useEffect(() => { load(1, bucket); setPage(1); }, [bucket]);
+  useEffect(() => { setPage(1); load(1, bucket, search, category); }, [bucket, category]);
 
   async function accept(id: string) {
     setBusyId(id); setMsg("");
@@ -109,7 +111,8 @@ export default function Orders() {
     } catch (e: any) { setMsg("Ship failed: " + e.message); }
     finally { setBusyId(""); }
   }
-  function go(p: number) { setPage(p); load(p, bucket); }
+  function go(p: number) { setPage(p); load(p, bucket, search, category); }
+  function runSearch(term: string) { setSearch(term); setPage(1); load(1, bucket, term, category); }
 
   return (
     <Shell>
@@ -118,11 +121,38 @@ export default function Orders() {
           <h2 style={{ margin: 0 }}>Orders</h2>
           <div className="conn-sub" style={{ marginTop: 4 }}>Marketplace orders across all channels</div>
         </div>
-        <button className="btn btn-ghost" onClick={() => load()}>Refresh</button>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <input
+            defaultValue={search}
+            placeholder="Search order #, customer, date, SKU..."
+            onKeyDown={(e) => { if (e.key === "Enter") runSearch((e.target as HTMLInputElement).value); }}
+            style={{ padding: "8px 12px", border: "1px solid #e6e8ee", borderRadius: 8, fontSize: 13, minWidth: 260 }}
+          />
+          {search && <button className="btn btn-ghost" onClick={() => runSearch("")}>Clear</button>}
+          <button className="btn btn-ghost" onClick={() => load()}>Refresh</button>
+        </div>
       </div>
 
       {msg && <div className="toast ok" style={{ marginBottom: 16 }}>{msg}</div>}
 
+      <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+        {[["all", "All items"], ["clothing", "Clothing"], ["footwear", "Footwear"]].map(([k, label]) => {
+          const on = category === k;
+          const n = data?.categoryCounts?.[k as string];
+          return (
+            <button key={k as string} onClick={() => setCategory(k as string)}
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 7,
+                padding: "7px 13px", borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: "pointer",
+                border: on ? "1px solid #1a2233" : "1px solid #e6e8ee",
+                background: on ? "#1a2233" : "#fff", color: on ? "#fff" : "#1a2233",
+              }}>
+              {label}
+              {n != null && <span style={{ fontSize: 11, fontWeight: 700, padding: "1px 7px", borderRadius: 20, background: on ? "rgba(255,255,255,.22)" : "#eceef2", color: on ? "#fff" : "#6b7488" }}>{n}</span>}
+            </button>
+          );
+        })}
+      </div>
       <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
         {TABS.map((t) => {
           const activeTab = bucket === t.key;
