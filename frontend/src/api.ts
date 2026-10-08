@@ -56,6 +56,10 @@ export const api = {
   deleteBufferRule: (id: string, ruleId: string) => request(`/channels/${id}/buffer-rules/${ruleId}`, { method: "DELETE" }),
   bulkAddBufferRules: (id: string, scope: string, values: string[], amount: number) =>
     request(`/channels/${id}/buffer-rules/bulk`, { method: "POST", body: JSON.stringify({ scope, values, amount }) }),
+  bulkMatchOverrides: (id: string, skus: string[]) =>
+    request(`/channels/${id}/match-overrides/bulk`, { method: "POST", body: JSON.stringify({ skus }) }),
+  deleteMatchOverride: (id: string, ovId: string) =>
+    request(`/channels/${id}/match-overrides/${ovId}`, { method: "DELETE" }),
   mapOffer: (id: string, offerId: string, catalogItemId: string | null) =>
     request(`/channels/${id}/offers/${offerId}`, { method: "PATCH", body: JSON.stringify({ catalogItemId }) }),
   sampleOffers: (id: string) => request(`/channels/${id}/offers/sample`, { method: "POST" }),

@@ -41,6 +41,8 @@ export default function ChannelSettings() {
     return r;
   }
   async function delRule(ruleId: string) { await api.deleteBufferRule(id!, ruleId); load(); }
+  async function addMatchSkus(skus: string[]) { const r = await api.bulkMatchOverrides(id!, skus); load(); return r; }
+  async function delMatchOverride(ovId: string) { await api.deleteMatchOverride(id!, ovId); load(); }
   async function mapOffer(offerId: string, catalogItemId: string) {
     await api.mapOffer(id!, offerId, catalogItemId || null);
     load();
@@ -117,10 +119,58 @@ export default function ChannelSettings() {
         )}
       </div>
 
+      <div className="card" style={{ marginBottom: 18 }}>
+        <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4 }}>Force SKU match</div>
+        <div className="conn-sub" style={{ marginBottom: 14 }}>
+          Optional. These offer SKUs match your catalog by SKU (full stock from the catalog item), even on a UPC channel — use it when some items share the same UPC. Everything else keeps the channel's normal matching.
+        </div>
+        <SkuMatchAdder onAdd={addMatchSkus} />
+        {(s.matchOverrides ?? []).length > 0 && (
+          <table className="otable" style={{ marginTop: 14 }}>
+            <thead><tr><th>Offer SKU (matched by SKU)</th><th></th></tr></thead>
+            <tbody>
+              {s.matchOverrides.map((o: any) => (
+                <tr key={o.id}>
+                  <td className="mono">{o.offerSku}</td>
+                  <td><button className="btn btn-danger" onClick={() => delMatchOverride(o.id)}>Remove</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
       {s.mappingMode === "manual" && (
         <ManualBulkPanel id={id!} setMsg={setMsg} reload={() => { load(); setRefreshKey((k) => k + 1); }} />
       )}
     </Shell>
+  );
+}
+
+function SkuMatchAdder({ onAdd }: { onAdd: (skus: string[]) => Promise<any> }) {
+  const [text, setText] = useState("");
+  const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+  async function run() {
+    const skus = text.split(/[\s,]+/).map((v) => v.trim()).filter(Boolean);
+    if (skus.length === 0) { setMsg("Paste at least one SKU"); return; }
+    setBusy(true); setMsg("");
+    try { const r = await onAdd(skus); setMsg(`Added ${r.added} of ${r.total}`); setText(""); }
+    catch (e: any) { setMsg(e.message || "Failed"); } finally { setBusy(false); }
+  }
+  return (
+    <div style={{ display: "flex", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
+      <div className="field" style={{ margin: 0, flex: 1, minWidth: 280 }}>
+        <label>SKUs (one per line, or comma / space separated)</label>
+        <textarea value={text} onChange={(e) => setText(e.target.value)} rows={4}
+          placeholder={"BAL-BLK-35\nBAL-BLK-36"}
+          style={{ width: "100%", border: "1px solid #e6e8ee", borderRadius: 8, padding: "9px 11px", fontSize: 13, fontFamily: "ui-monospace, Menlo, monospace", resize: "vertical" }} />
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <button className="btn" onClick={run} disabled={busy}>{busy ? "Adding..." : "Add SKUs"}</button>
+        {msg && <span className="conn-sub">{msg}</span>}
+      </div>
+    </div>
   );
 }
 

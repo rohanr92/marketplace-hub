@@ -24,11 +24,12 @@ export async function channelSettingsRoutes(app: FastifyInstance) {
 
     const rules = await db.bufferRule.findMany({ where: { connectionId: id }, orderBy: { createdAt: "asc" } });
     const offers = await db.channelOffer.findMany({ where: { connectionId: id }, orderBy: { updatedAt: "desc" }, take: 500 });
+    const matchOverrides = await db.matchOverride.findMany({ where: { connectionId: id }, orderBy: { createdAt: "asc" } });
 
     return {
       id: conn.id, label: conn.label, type: conn.type, baseUrl: conn.baseUrl,
       syncEnabled: conn.syncEnabled, mappingMode: conn.mappingMode, defaultBuffer: conn.defaultBuffer,
-      rules, offers,
+      rules, offers, matchOverrides,
     };
   });
 
@@ -191,6 +192,35 @@ export async function channelReconcileRoutes(app: FastifyInstance) {
   });
 
   // Match summary: how many offers match the catalog by the channel's mode
+  // Force-SKU-match list: these offer SKUs match by SKU even on a UPC channel (for colliding UPCs).
+  app.post("/channels/:id/match-overrides/bulk", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const conn = await db.connection.findFirst({ where: { id, tenantId: req.tenantId } });
+    if (!conn) return reply.code(404).send({ error: "Not found" });
+    const b = z.object({ skus: z.array(z.string()).min(1) }).parse(req.body);
+    const skus = [...new Set(b.skus.map((v) => v.trim()).filter(Boolean))];
+    if (skus.length === 0) return reply.code(400).send({ error: "No SKUs provided" });
+    const existing = await db.matchOverride.findMany({ where: { connectionId: id, offerSku: { in: skus } } });
+    const have = new Set(existing.map((o) => o.offerSku));
+    let added = 0;
+    for (const offerSku of skus) {
+      if (have.has(offerSku)) continue;
+      await db.matchOverride.create({ data: { tenantId: req.tenantId, connectionId: id, offerSku } });
+      added++;
+    }
+    await autoSyncIfEnabled(id, req.tenantId);
+    return { added, total: skus.length };
+  });
+
+  app.delete("/channels/:id/match-overrides/:ovId", async (req, reply) => {
+    const { ovId } = req.params as { id: string; ovId: string };
+    const ov = await db.matchOverride.findFirst({ where: { id: ovId, tenantId: req.tenantId } });
+    if (!ov) return reply.code(404).send({ error: "Not found" });
+    await db.matchOverride.delete({ where: { id: ovId } });
+    await autoSyncIfEnabled(ov.connectionId, req.tenantId);
+    return { ok: true };
+  });
+
   app.get("/channels/:id/reconcile", async (req, reply) => {
     const { id } = req.params as { id: string };
     const conn = await db.connection.findFirst({ where: { id, tenantId: req.tenantId } });
@@ -201,6 +231,8 @@ export async function channelReconcileRoutes(app: FastifyInstance) {
 
     const bySku = new Map(catalog.map((c) => [c.sku, c]));
     const byUpc = new Map(catalog.filter((c) => c.barcode).map((c) => [c.barcode!, c]));
+    const ovList = await db.matchOverride.findMany({ where: { connectionId: id } });
+    const ovSkus = new Set(ovList.map((o) => o.offerSku));
 
     const mode = conn.mappingMode;
     let matched = 0;
@@ -208,7 +240,8 @@ export async function channelReconcileRoutes(app: FastifyInstance) {
 
     for (const o of offers) {
       let hit = null;
-      if (mode === "manual") hit = o.catalogItemId ? true : null;
+      if (ovSkus.has(o.offerSku)) hit = bySku.get(o.offerSku); // forced SKU match
+      else if (mode === "manual") hit = o.catalogItemId ? true : null;
       else if (mode === "auto_upc") hit = o.offerUpc ? byUpc.get(o.offerUpc) : null;
       else hit = bySku.get(o.offerSku); // auto_sku / full_catalog default by sku
       if (hit) matched++;

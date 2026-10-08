@@ -200,3 +200,15 @@ model SyncLog {
 
   @@index([connectionId, createdAt])
 }
+
+
+model MatchOverride {
+  id           String   @id @default(cuid())
+  tenantId     String
+  connectionId String
+  offerSku     String
+  createdAt    DateTime @default(now())
+
+  @@unique([connectionId, offerSku])
+  @@index([connectionId])
+}

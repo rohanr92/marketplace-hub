@@ -44,6 +44,8 @@ export async function computeChannelPlan(connectionId: string, tenantId: string,
   }
   const catalog = await db.catalogItem.findMany({ where: { tenantId } });
   const rules = await db.bufferRule.findMany({ where: { connectionId } });
+  const overrides = await db.matchOverride.findMany({ where: { connectionId } });
+  const overrideSkus = new Set(overrides.map((o) => o.offerSku));
 
   const bySku = new Map(catalog.map((c) => [c.sku, c]));
   const byUpc = new Map(catalog.filter((c) => c.barcode).map((c) => [c.barcode!, c]));
@@ -54,7 +56,8 @@ export async function computeChannelPlan(connectionId: string, tenantId: string,
   for (const o of offers) {
     // Resolve which catalog item this offer maps to, by mode.
     let cat: any = null;
-    if (mode === "manual") cat = o.catalogItemId ? byId.get(o.catalogItemId) : null;
+    if (overrideSkus.has(o.offerSku)) cat = o.offerSku ? bySku.get(o.offerSku) : null; // forced SKU match (UPC collides)
+    else if (mode === "manual") cat = o.catalogItemId ? byId.get(o.catalogItemId) : null;
     else if (mode === "auto_upc") cat = o.offerUpc ? byUpc.get(o.offerUpc) : null;
     // SKU mode: match by SKU first, then fall back to UPC/barcode if the SKU doesn't match.
     else cat = (o.offerSku && bySku.get(o.offerSku)) || (o.offerUpc && byUpc.get(o.offerUpc)) || null; // auto_sku / full_catalog
