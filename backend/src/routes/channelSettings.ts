@@ -280,11 +280,14 @@ export async function channelReconcileExtraRoutes(app: FastifyInstance) {
     const bySku = new Map(catalog.map((c) => [c.sku, c]));
     const byUpc = new Map(catalog.filter((c) => c.barcode).map((c) => [c.barcode!, c]));
     const byId = new Map(catalog.map((c) => [c.id, c]));
+    const ovList2 = await db.matchOverride.findMany({ where: { connectionId: id } });
+    const ovSkus2 = new Set(ovList2.map((o) => o.offerSku));
     const mode = conn.mappingMode;
 
     const enriched = offers.map((o) => {
       let match: any = null;
-      if (mode === "manual") match = o.catalogItemId ? byId.get(o.catalogItemId) : null;
+      if (ovSkus2.has(o.offerSku)) match = bySku.get(o.offerSku); // forced SKU match
+      else if (mode === "manual") match = o.catalogItemId ? byId.get(o.catalogItemId) : null;
       else if (mode === "auto_upc") match = o.offerUpc ? byUpc.get(o.offerUpc) : null;
       else match = bySku.get(o.offerSku);
       return {
